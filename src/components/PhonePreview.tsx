@@ -9,6 +9,7 @@ interface PhonePreviewProps {
   settings: PhoneSettings;
   selfId: number | null;
   phoneRef?: React.RefObject<HTMLDivElement | null>;
+  onUpdateMessage?: (msgId: number, content: string) => void;
 }
 
 function escHtml(str: string): string {
@@ -49,7 +50,7 @@ function TimeNotice({ content }: { content: string }) {
   );
 }
 
-function ChatBubble({ msg, user, userIndex, isSelf, isGroup, selfColor, otherColor }: {
+function ChatBubble({ msg, user, userIndex, isSelf, isGroup, selfColor, otherColor, onUpdateMessage }: {
   msg: ChatMessage;
   user: ChatUser;
   userIndex: number;
@@ -57,9 +58,22 @@ function ChatBubble({ msg, user, userIndex, isSelf, isGroup, selfColor, otherCol
   isGroup: boolean;
   selfColor: string;
   otherColor: string;
+  onUpdateMessage?: (msgId: number, content: string) => void;
 }) {
   const avatarSrc = user.avatar || getDefaultAvatar(userIndex);
   const bubbleColor = isSelf ? selfColor : otherColor;
+  const imgInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !onUpdateMessage) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      onUpdateMessage(msg.id, ev.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
 
   const renderContent = () => {
     switch (msg.type) {
@@ -70,12 +84,22 @@ function ChatBubble({ msg, user, userIndex, isSelf, isGroup, selfColor, otherCol
             <span dangerouslySetInnerHTML={{ __html: escHtml(msg.content).replace(/\n/g, '<br>') }} />
           </div>
         );
-      case 'image':
+      case 'image': {
+        const hasImage = msg.content && !msg.content.includes('placeholder');
         return (
-          <div className="wc-bubble wc-bubble-image">
-            <img src={msg.content} alt="" />
+          <div className="wc-bubble wc-bubble-image" onClick={() => imgInputRef.current?.click()} style={{ cursor: 'pointer' }}>
+            {hasImage ? (
+              <img src={msg.content} alt="" />
+            ) : (
+              <div className="wc-img-placeholder">
+                <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" fill="#999" stroke="none" /><path d="M21 15l-5-5L5 21" /></svg>
+                <span>点击上传图片</span>
+              </div>
+            )}
+            <input ref={imgInputRef} type="file" accept="image/*" hidden onChange={handleImageUpload} />
           </div>
         );
+      }
       case 'voice': {
         const dur = msg.params.duration || 2;
         const w = 180 + Math.min(dur * 30, 400);
@@ -140,7 +164,7 @@ function ChatBubble({ msg, user, userIndex, isSelf, isGroup, selfColor, otherCol
   );
 }
 
-export function PhonePreview({ users, messages, settings, selfId, phoneRef }: PhonePreviewProps) {
+export function PhonePreview({ users, messages, settings, selfId, phoneRef, onUpdateMessage }: PhonePreviewProps) {
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -213,6 +237,7 @@ export function PhonePreview({ users, messages, settings, selfId, phoneRef }: Ph
                       isGroup={isGroup}
                       selfColor={settings.selfBubbleColor}
                       otherColor={settings.otherBubbleColor}
+                      onUpdateMessage={onUpdateMessage}
                     />
                   );
                 })}

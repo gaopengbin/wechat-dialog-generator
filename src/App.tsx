@@ -67,6 +67,10 @@ function App() {
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, avatar: null } : u));
   }, []);
 
+  const handleUpdateMessage = useCallback((msgId: number, content: string) => {
+    setMessages(prev => prev.map(m => m.id === msgId ? { ...m, content } : m));
+  }, []);
+
   // 用 html-to-image 截图（基于浏览器自身渲染，无文字偏移问题）
   const capturePhone = useCallback(async (longshot = false): Promise<HTMLCanvasElement | null> => {
     const phone = phoneRef.current;
@@ -263,7 +267,7 @@ function App() {
           )}
         </div>
         {hasMessages && (
-          <PhonePreview users={users} messages={messages} settings={settings} selfId={selfId} phoneRef={phoneRef} />
+          <PhonePreview users={users} messages={messages} settings={settings} selfId={selfId} phoneRef={phoneRef} onUpdateMessage={handleUpdateMessage} />
         )}
       </main>
 
