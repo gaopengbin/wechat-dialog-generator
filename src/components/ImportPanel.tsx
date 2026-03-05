@@ -10,15 +10,23 @@ const DOUBAO_PROMPT = `请帮我生成一段微信群聊天记录，要求如下
 
 输出格式严格按照以下规则，不要输出任何其他内容：
 1. 时间节点：**【X月X日 下午HH:MM】**
-2. 消息格式：**姓名**：消息内容
-3. 消息之间直接换行，不加序号或其他符号
+2. 文字消息：**姓名**：消息内容
+3. 图片消息：**姓名**：[图片]
+4. 红包消息：**姓名**：[红包]备注内容
+5. 转账消息：**姓名**：[转账]金额:备注
+6. 语音消息：**姓名**：[语音]秒数
+7. 消息之间直接换行，不加序号或其他符号
 
 示例格式：
 **【3月15日 下午14:00】**
 **张伟**：大家下周六有空吗，想组织个团建
 **李娜**：有空的，去哪里？
 **王芳**：我也可以，爬山怎么样
-**张伟**：爬山不错，就定香山吧`;
+**张伟**：爬山不错，就定香山吧
+**张伟**：[图片]
+**李娜**：风景真美！
+**王芳**：[红包]团建基金
+**张伟**：谢谢王姐！`;
 
 interface ImportPanelProps {
   text: string;
@@ -56,10 +64,13 @@ export function ImportPanel({ text, onTextChange, onImport }: ImportPanelProps) 
       <div className="s-card-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div className="format-tip">
           <strong>支持的格式：</strong><br />
-          Markdown 加粗：<code>**用户名**：消息内容</code><br />
-          纯文本格式：<code>用户名: 消息内容</code><br />
+          文字消息：<code>**用户名**：消息内容</code><br />
+          图片消息：<code>**用户名**：[图片]</code> 或 <code>**用户名**：[图片]URL</code><br />
+          红包消息：<code>**用户名**：[红包]备注</code><br />
+          转账消息：<code>**用户名**：[转账]金额:备注</code><br />
+          语音消息：<code>**用户名**：[语音]秒数</code><br />
           时间节点：<code>**【3月1日 14:32】**</code>
-          <div className="tip-muted">标题行(#)、引用行(&gt;)、空行自动跳过。第一个出现的用户默认为"自己"。</div>
+          <div className="tip-muted">标题行(#)、引用行(&gt;)、空行自动跳过。第一个出现的用户默认为"自己"。图片不带URL时可在预览中点击上传本地图片。</div>
         </div>
 
         {/* 豆包Prompt区域 */}
