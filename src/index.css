@@ -57,6 +57,16 @@ body {
   letter-spacing: -0.3px;
 }
 .app-header h1 svg { color: #07c160; }
+.visit-count {
+  font-family: 'Work Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  color: #8E8E93;
+  background: #F5F5F7;
+  padding: 2px 10px;
+  border-radius: 20px;
+  letter-spacing: 0;
+}
 .app-header-actions {
   display: flex;
   gap: 8px;

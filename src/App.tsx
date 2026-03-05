@@ -248,6 +248,11 @@ function App() {
         <h1>
           <MessageSquare size={22} />
           微信对话生成器
+          <span className="visit-count">
+            <span id="busuanzi_container_site_uv" style={{ display: 'none' }}>
+              <span id="busuanzi_value_site_uv"></span> 位访客
+            </span>
+          </span>
         </h1>
         {hasMessages && (
           <div className="app-header-actions">
