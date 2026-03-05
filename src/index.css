@@ -422,6 +422,127 @@ input[type="range"].form-range::-webkit-slider-thumb {
   font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
 
+/* ===================== MESSAGE EDITOR ===================== */
+.me-type-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.me-type-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.me-type-tab:hover { border-color: #d1fae5; background: #f0fdf4; color: #059669; }
+.me-type-tab.active { border-color: #07c160; background: #dcfce7; color: #07c160; }
+.me-select {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  font-size: 13px;
+  color: #374151;
+  background: #fff;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.me-select:focus { border-color: #07c160; }
+.me-input {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  font-size: 13px;
+  color: #374151;
+  background: #fff;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.me-input:focus { border-color: #07c160; }
+.me-textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  font-size: 13px;
+  color: #374151;
+  background: #fff;
+  outline: none;
+  resize: vertical;
+  font-family: inherit;
+  transition: border-color 0.2s;
+}
+.me-textarea:focus { border-color: #07c160; }
+.me-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.me-hint {
+  font-size: 12px;
+  color: #9ca3af;
+  white-space: nowrap;
+}
+.me-img-area {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.me-img-upload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100px;
+  height: 80px;
+  border: 2px dashed #d1d5db;
+  border-radius: 10px;
+  background: #fafbfc;
+  cursor: pointer;
+  color: #9ca3af;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+.me-img-upload:hover { border-color: #07c160; color: #07c160; background: #f0fdf4; }
+.me-img-preview {
+  position: relative;
+  display: inline-block;
+}
+.me-img-preview img {
+  max-width: 120px;
+  max-height: 80px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  display: block;
+}
+.me-img-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  background: #ef4444;
+  color: #fff;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  line-height: 1;
+}
+
 /* ===================== TOAST ===================== */
 .toast-msg {
   position: fixed;

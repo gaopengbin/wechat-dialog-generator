@@ -3,6 +3,7 @@ import { toCanvas } from 'html-to-image';
 import { Download, Copy, Image as ImageIcon, MessageSquare } from 'lucide-react';
 import { ImportPanel } from '@/components/ImportPanel';
 import { UserAvatarManager } from '@/components/UserAvatarManager';
+import { MessageEditor } from '@/components/MessageEditor';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { PhonePreview } from '@/components/PhonePreview';
 import { parseChatRecord } from '@/lib/parser';
@@ -69,6 +70,13 @@ function App() {
 
   const handleUpdateMessage = useCallback((msgId: number, content: string) => {
     setMessages(prev => prev.map(m => m.id === msgId ? { ...m, content } : m));
+  }, []);
+
+  const handleAddMessage = useCallback((msg: Omit<ChatMessage, 'id'>) => {
+    setMessages(prev => {
+      const maxId = prev.reduce((max, m) => Math.max(max, m.id), 0);
+      return [...prev, { ...msg, id: maxId + 1 }];
+    });
   }, []);
 
   // 用 html-to-image 截图（基于浏览器自身渲染，无文字偏移问题）
@@ -261,6 +269,9 @@ function App() {
           <ImportPanel text={importText} onTextChange={setImportText} onImport={handleImport} />
           {users.length > 0 && (
             <UserAvatarManager users={users} selfId={selfId} onUpdateAvatar={handleUpdateAvatar} onRemoveAvatar={handleRemoveAvatar} onSetSelf={setSelfId} />
+          )}
+          {users.length > 0 && (
+            <MessageEditor users={users} selfId={selfId} onAddMessage={handleAddMessage} />
           )}
           {hasMessages && (
             <SettingsPanel settings={settings} onSettingsChange={setSettings} />
