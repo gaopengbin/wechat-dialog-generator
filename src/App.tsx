@@ -251,13 +251,13 @@ function App() {
         </h1>
         {hasMessages && (
           <div className="app-header-actions">
-            <button className="btn btn-white btn-sm" onClick={handleGenerateImage}>
+            <button className="btn btn-primary btn-sm" onClick={handleGenerateImage}>
               <Download size={15} /> 生成图片
             </button>
-            <button className="btn btn-white btn-sm" onClick={handleCopyImage}>
+            <button className="btn btn-outline btn-sm" onClick={handleCopyImage}>
               <Copy size={15} /> 复制
             </button>
-            <button className="btn btn-white btn-sm" onClick={handleGenerateLongImage}>
+            <button className="btn btn-outline btn-sm" onClick={handleGenerateLongImage}>
               <ImageIcon size={15} /> 长截图
             </button>
           </div>
