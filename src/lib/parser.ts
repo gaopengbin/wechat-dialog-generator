@@ -36,15 +36,16 @@ function parseSpecialContent(content: string): { type: MessageType; content: str
   return null;
 }
 
-const DEFAULT_AVATARS = [
-  '/avatar_1.png',
-  '/avatar_2.png',
-  '/avatar_3.png',
-  '/avatar_4.png',
+const AVATAR_FILES = [
+  'avatar_1.png',
+  'avatar_2.png',
+  'avatar_3.png',
+  'avatar_4.png',
 ];
 
 export function getDefaultAvatar(index: number): string {
-  return DEFAULT_AVATARS[index % DEFAULT_AVATARS.length];
+  const base = import.meta.env.BASE_URL;
+  return `${base}${AVATAR_FILES[index % AVATAR_FILES.length]}`;
 }
 
 interface ParseResult {

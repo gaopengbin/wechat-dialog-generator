@@ -225,7 +225,7 @@ export function PhonePreview({ users, messages, settings, selfId, phoneRef }: Ph
                 <div className="wc-bottom-inner">
                   {/* 语音按钮 */}
                   <div className="wc-bottom-icon">
-                    <img src="/wechat-bottom-icon1.png" alt="语音" />
+                    <img src={`${import.meta.env.BASE_URL}wechat-bottom-icon1.png`} alt="语音" />
                   </div>
                   {/* 输入框 */}
                   <div className="wc-input-box">
@@ -237,11 +237,11 @@ export function PhonePreview({ users, messages, settings, selfId, phoneRef }: Ph
                   </div>
                   {/* 表情按钮 */}
                   <div className="wc-bottom-icon">
-                    <img src="/wechat-bottom-icon2.png" alt="表情" />
+                    <img src={`${import.meta.env.BASE_URL}wechat-bottom-icon2.png`} alt="表情" />
                   </div>
                   {/* 加号按钮 */}
                   <div className="wc-bottom-icon">
-                    <img src="/wechat-bottom-icon3.png" alt="加号" />
+                    <img src={`${import.meta.env.BASE_URL}wechat-bottom-icon3.png`} alt="加号" />
                   </div>
                 </div>
               </div>
