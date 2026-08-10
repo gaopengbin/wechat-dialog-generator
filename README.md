@@ -85,6 +85,10 @@ npm run build
 | 语音 | `**用户名**：[语音]秒数` | `**张三**：[语音]5` |
 | 时间 | `**【时间】**` | `**【3月1日 14:32】**` |
 
+## ⭐ Star History
+
+[![Star History Chart](https://raw.githubusercontent.com/gaopengbin/wechat-dialog-generator/star-history-data/.github/star-history/chart.svg)](https://github.com/gaopengbin/wechat-dialog-generator)
+
 ## 📄 License
 
 MIT
