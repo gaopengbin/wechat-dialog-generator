@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { toCanvas } from 'html-to-image';
 import { Download, Copy, Image as ImageIcon, MessageSquare } from 'lucide-react';
 import { ImportPanel } from '@/components/ImportPanel';
@@ -7,6 +7,11 @@ import { MessageEditor } from '@/components/MessageEditor';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { PhonePreview } from '@/components/PhonePreview';
 import { parseChatRecord } from '@/lib/parser';
+import {
+  messageCountBucket,
+  participantCountBucket,
+  trackProductEvent,
+} from '@/lib/product-analytics';
 import type { ChatUser, ChatMessage, PhoneSettings } from '@/types';
 
 function App() {
@@ -26,6 +31,20 @@ function App() {
   const [toast, setToast] = useState('');
   const phoneRef = useRef<HTMLDivElement | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const dialogTracked = useRef(false);
+
+  useEffect(() => {
+    void trackProductEvent('page_view');
+  }, []);
+
+  useEffect(() => {
+    if (dialogTracked.current || messages.length === 0) return;
+    dialogTracked.current = true;
+    void trackProductEvent('dialog_created', {
+      message_count_bucket: messageCountBucket(messages.length),
+      participant_count_bucket: participantCountBucket(users.length),
+    });
+  }, [messages.length, users.length]);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -198,11 +217,15 @@ function App() {
       link.download = '微信聊天记录_' + Date.now() + '.png';
       link.href = canvas.toDataURL('image/png');
       link.click();
+      void trackProductEvent('image_exported', {
+        capture_mode: 'standard',
+        message_count_bucket: messageCountBucket(messages.length),
+      });
       showToast('图片已生成并下载！');
     } catch (e: unknown) {
       showToast('生成失败：' + (e instanceof Error ? e.message : String(e)));
     }
-  }, [showToast, capturePhone]);
+  }, [showToast, capturePhone, messages.length]);
 
   const handleCopyImage = useCallback(async () => {
     if (!phoneRef.current) return;
@@ -214,6 +237,10 @@ function App() {
         if (!blob) return;
         try {
           await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+          void trackProductEvent('image_exported', {
+            capture_mode: 'clipboard',
+            message_count_bucket: messageCountBucket(messages.length),
+          });
           showToast('图片已复制到剪贴板！');
         } catch {
           showToast('复制失败，请使用下载功能');
@@ -222,7 +249,7 @@ function App() {
     } catch {
       showToast('操作失败');
     }
-  }, [showToast, capturePhone]);
+  }, [showToast, capturePhone, messages.length]);
 
   const handleGenerateLongImage = useCallback(async () => {
     if (!phoneRef.current) return;
@@ -234,11 +261,15 @@ function App() {
       link.download = '微信聊天记录_长截图_' + Date.now() + '.png';
       link.href = canvas.toDataURL('image/png');
       link.click();
+      void trackProductEvent('image_exported', {
+        capture_mode: 'long',
+        message_count_bucket: messageCountBucket(messages.length),
+      });
       showToast('长截图已生成并下载！');
     } catch (e: unknown) {
       showToast('生成失败：' + (e instanceof Error ? e.message : String(e)));
     }
-  }, [showToast, capturePhone]);
+  }, [showToast, capturePhone, messages.length]);
 
   const hasMessages = messages.length > 0;
 
@@ -248,11 +279,6 @@ function App() {
         <h1>
           <MessageSquare size={22} />
           微信对话生成器
-          <span className="visit-count">
-            <span id="busuanzi_container_site_uv" style={{ display: 'none' }}>
-              <span id="busuanzi_value_site_uv"></span> 位访客
-            </span>
-          </span>
         </h1>
         {hasMessages && (
           <div className="app-header-actions">
@@ -286,6 +312,10 @@ function App() {
           <PhonePreview users={users} messages={messages} settings={settings} selfId={selfId} phoneRef={phoneRef} onUpdateMessage={handleUpdateMessage} />
         )}
       </main>
+
+      <footer className="analytics-note">
+        聊天内容、头像和生成图片始终在本地处理；站点仅记录匿名访问、创建和导出事件。
+      </footer>
 
       {toast && <div className="toast-msg">{toast}</div>}
     </>
