@@ -41,3 +41,16 @@ jobs:
 
       - id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Notify IndexNow
+        continue-on-error: true
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --request POST 'https://api.indexnow.org/indexnow' \
+            --header 'Content-Type: application/json; charset=utf-8' \
+            --data '{
+              "host": "chat.laogao.xyz",
+              "key": "b853ffa181844919b388137239dedea0",
+              "keyLocation": "https://chat.laogao.xyz/b853ffa181844919b388137239dedea0.txt",
+              "urlList": ["https://chat.laogao.xyz/"]
+            }'

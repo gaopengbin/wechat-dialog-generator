@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { toCanvas } from 'html-to-image';
-import { Download, Copy, Image as ImageIcon, MessageSquare, ShieldCheck, Sparkles, Zap } from 'lucide-react';
+import { Download, Copy, Image as ImageIcon, MessageSquare, Share2, ShieldCheck, Sparkles, Zap } from 'lucide-react';
 import { ImportPanel } from '@/components/ImportPanel';
 import { UserAvatarManager } from '@/components/UserAvatarManager';
 import { MessageEditor } from '@/components/MessageEditor';
@@ -62,6 +62,27 @@ function App() {
     setImportText(content);
     editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     showToast('模板已载入，点击“解析并导入”即可预览');
+  }, [showToast]);
+
+  const handleShare = useCallback(async () => {
+    const shareData = {
+      title: '微信对话生成器',
+      text: '在线制作微信聊天截图与长截图，无需登录，内容仅在浏览器本地处理。',
+      url: 'https://chat.laogao.xyz/',
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+        showToast('分享面板已打开');
+        return;
+      }
+      await navigator.clipboard.writeText(shareData.url);
+      showToast('链接已复制，可以分享给朋友了');
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      showToast('分享失败，请稍后再试');
+    }
   }, [showToast]);
 
   const handleImport = useCallback(() => {
@@ -323,6 +344,9 @@ function App() {
           <div className="intro-actions">
             <a className="btn btn-primary" href="#editor"><Zap size={16} /> 立即开始制作</a>
             <a className="btn btn-outline" href="#templates">浏览对话模板</a>
+            <button className="btn btn-outline" type="button" onClick={handleShare}>
+              <Share2 size={16} /> 分享工具
+            </button>
           </div>
         </div>
         <div className="intro-trust">
