@@ -7,7 +7,7 @@
 
 ## 🔗 在线体验
 
-👉 **[https://gaopengbin.github.io/wechat-dialog-generator/](https://gaopengbin.github.io/wechat-dialog-generator/)**
+👉 **[https://chat.laogao.xyz/](https://chat.laogao.xyz/)**
 
 ## ✨ 功能特性
 

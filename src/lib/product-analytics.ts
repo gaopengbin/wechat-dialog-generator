@@ -1,5 +1,5 @@
 const endpoint = import.meta.env.VITE_PRODUCT_ANALYTICS_ENDPOINT ||
-  (window.location.hostname === 'gaopengbin.github.io'
+  (['gaopengbin.github.io', 'chat.laogao.xyz'].includes(window.location.hostname)
     ? 'https://laogao.xyz/geod-telemetry/v1/product-events'
     : '')
 
