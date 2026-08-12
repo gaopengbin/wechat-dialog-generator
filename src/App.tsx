@@ -1,11 +1,12 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { toCanvas } from 'html-to-image';
-import { Download, Copy, Image as ImageIcon, MessageSquare } from 'lucide-react';
+import { Download, Copy, Image as ImageIcon, MessageSquare, ShieldCheck, Sparkles, Zap } from 'lucide-react';
 import { ImportPanel } from '@/components/ImportPanel';
 import { UserAvatarManager } from '@/components/UserAvatarManager';
 import { MessageEditor } from '@/components/MessageEditor';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { PhonePreview } from '@/components/PhonePreview';
+import { GrowthContent } from '@/components/GrowthContent';
 import { parseChatRecord } from '@/lib/parser';
 import {
   messageCountBucket,
@@ -32,6 +33,7 @@ function App() {
   const phoneRef = useRef<HTMLDivElement | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const dialogTracked = useRef(false);
+  const editorRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     void trackProductEvent('page_view');
@@ -51,6 +53,12 @@ function App() {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(''), 2500);
   }, []);
+
+  const handleUseTemplate = useCallback((content: string) => {
+    setImportText(content);
+    editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    showToast('模板已载入，点击“解析并导入”即可预览');
+  }, [showToast]);
 
   const handleImport = useCallback(() => {
     if (!importText.trim()) {
@@ -280,6 +288,14 @@ function App() {
           <MessageSquare size={22} />
           微信对话生成器
         </h1>
+        {!hasMessages && (
+          <nav className="app-nav" aria-label="页面导航">
+            <a href="#editor">开始制作</a>
+            <a href="#templates">模板</a>
+            <a href="#guide">教程</a>
+            <a href="#faq">常见问题</a>
+          </nav>
+        )}
         {hasMessages && (
           <div className="app-header-actions">
             <button className="btn btn-primary btn-sm" onClick={handleGenerateImage}>
@@ -295,7 +311,24 @@ function App() {
         )}
       </header>
 
-      <main className="app-main">
+      <section className="product-intro">
+        <div>
+          <span className="intro-badge"><Sparkles size={14} /> 在线微信聊天截图制作工具</span>
+          <h2>把对话排成一张<br /><em>清晰、自然的聊天截图</em></h2>
+          <p>支持单聊、群聊、图片、语音、红包和转账消息，可导出高清截图与完整长截图。</p>
+          <div className="intro-actions">
+            <a className="btn btn-primary" href="#editor"><Zap size={16} /> 立即开始制作</a>
+            <a className="btn btn-outline" href="#templates">浏览对话模板</a>
+          </div>
+        </div>
+        <div className="intro-trust">
+          <span><ShieldCheck size={18} /> 对话和头像仅在本地处理</span>
+          <span>无弹窗广告</span>
+          <span>无需登录</span>
+        </div>
+      </section>
+
+      <main className="app-main" id="editor" ref={editorRef}>
         <div className="app-left">
           <ImportPanel text={importText} onTextChange={setImportText} onImport={handleImport} />
           {users.length > 0 && (
@@ -312,6 +345,8 @@ function App() {
           <PhonePreview users={users} messages={messages} settings={settings} selfId={selfId} phoneRef={phoneRef} onUpdateMessage={handleUpdateMessage} />
         )}
       </main>
+
+      <GrowthContent onUseTemplate={handleUseTemplate} />
 
       <footer className="analytics-note">
         聊天内容、头像和生成图片始终在本地处理；站点仅记录匿名访问、创建和导出事件。
