@@ -19,6 +19,13 @@ export function SettingsPanel({ settings, onSettingsChange }: SettingsPanelProps
       <div className="s-card-body">
         <div className="form-grid">
           <div className="form-item">
+            <label className="form-label">系统样式</label>
+            <select className="form-input" value={settings.platform} onChange={(e) => update({ platform: e.target.value as PhoneSettings['platform'] })}>
+              <option value="ios">iOS</option>
+              <option value="android">Android（Google）</option>
+            </select>
+          </div>
+          <div className="form-item">
             <label className="form-label">手机时间</label>
             <input type="time" className="form-input" value={settings.time} onChange={(e) => update({ time: e.target.value })} />
           </div>
@@ -27,12 +34,37 @@ export function SettingsPanel({ settings, onSettingsChange }: SettingsPanelProps
             <input type="text" className="form-input" value={settings.contactName} onChange={(e) => update({ contactName: e.target.value })} />
           </div>
           <div className="form-item">
-            <label className="form-label">信号格数</label>
+            <label className="form-label">主卡信号</label>
             <select className="form-input" value={settings.signal} onChange={(e) => update({ signal: parseInt(e.target.value) })}>
               <option value={1}>1格</option>
               <option value={2}>2格</option>
               <option value={3}>3格</option>
               <option value={4}>4格</option>
+            </select>
+          </div>
+          <div className="form-item">
+            <label className="form-label">SIM 卡</label>
+            <select className="form-input" value={settings.simMode} onChange={(e) => update({ simMode: e.target.value as PhoneSettings['simMode'] })}>
+              <option value="single">单卡</option>
+              <option value="dual">双卡</option>
+            </select>
+          </div>
+          {settings.simMode === 'dual' && (
+            <div className="form-item">
+              <label className="form-label">副卡信号</label>
+              <select className="form-input" value={settings.secondarySignal} onChange={(e) => update({ secondarySignal: parseInt(e.target.value) })}>
+                <option value={1}>1格</option>
+                <option value={2}>2格</option>
+                <option value={3}>3格</option>
+                <option value={4}>4格</option>
+              </select>
+            </div>
+          )}
+          <div className="form-item">
+            <label className="form-label">Wi-Fi</label>
+            <select className="form-input" value={settings.wifiEnabled ? 'on' : 'off'} onChange={(e) => update({ wifiEnabled: e.target.value === 'on' })}>
+              <option value="on">开启</option>
+              <option value="off">关闭</option>
             </select>
           </div>
           <div className="form-item">

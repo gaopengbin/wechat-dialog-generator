@@ -64,37 +64,185 @@
 }
 .wc-signal-group {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 18px;
-  margin-right: 18px;
+  height: 36px;
+}
+.wc-status-icons {
+  display: flex;
+  align-items: flex-end;
+  gap: 18px;
+  height: 36px;
+}
+.wc-official-signal,
+.wc-official-wifi {
+  display: block;
+  flex: 0 0 auto;
+  position: relative;
+  overflow: hidden;
+}
+.wc-official-signal-single {
+  width: 60px;
+  height: 36px;
+}
+.wc-official-signal-dual {
+  width: 48px;
+  height: 36px;
+}
+.wc-official-signal img {
+  position: absolute;
+  width: 148px;
+  height: 60px;
+  max-width: none;
+  filter: brightness(0);
+}
+.wc-official-signal-single img {
+  left: -44px;
+  top: -10px;
+}
+.wc-official-signal-dual img {
+  width: 118.4px;
+  height: 48px;
+  left: -33.6px;
+  top: -5.6px;
+}
+.wc-official-signal-base {
+  opacity: 0.25;
+}
+.wc-official-signal-active {
+  position: absolute;
+  left: 0;
+  overflow: hidden;
+}
+.wc-official-signal-primary {
+  top: 0;
+  height: 100%;
+}
+.wc-official-signal-dual .wc-official-signal-primary {
+  height: 50%;
+}
+.wc-official-signal-secondary {
+  top: 50%;
+  height: 50%;
+}
+.wc-official-signal-secondary img {
+  top: -23.6px;
+}
+.wc-official-wifi {
+  width: 49px;
+  height: 36px;
+}
+.wc-official-wifi img {
+  position: absolute;
+  width: 90px;
+  height: 36.5px;
+  max-width: none;
+  left: -20px;
+  top: 0;
+  filter: brightness(0);
 }
 .wc-battery-wrap {
+  box-sizing: border-box;
   width: 75px;
   height: 36px;
+  padding: 7px 16px 7px 7px;
+  position: relative;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 75px 36px;
+  flex: 0 0 auto;
+}
+.wc-battery-level {
+  display: block;
+  width: 100%;
+  height: 22px;
+}
+.wc-battery-level i {
+  display: block;
+  height: 22px;
+  max-width: 100%;
+  border-radius: 4px;
+  background: #000;
+  transition: width 0.25s ease;
+}
+.wc-android-signal-group {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  height: 39px;
+}
+.wc-android-signal,
+.wc-android-wifi {
+  display: block;
+  fill: #000;
+  flex: 0 0 auto;
+}
+.wc-android-signal {
+  width: 39px;
+  height: 39px;
+}
+.wc-android-wifi {
+  width: 54px;
+  height: 39px;
+}
+.wc-android-battery {
+  box-sizing: border-box;
+  width: 72px;
+  height: 39px;
+  border: 3px solid rgba(0, 0, 0, 0.72);
+  border-radius: 9px;
+  position: relative;
   display: flex;
   align-items: center;
+  justify-content: center;
+  overflow: visible;
+  flex: 0 0 auto;
 }
-.wc-battery-outer {
-  width: 60px;
-  height: 24px;
-  border: 2.5px solid #000;
+.wc-android-battery > i {
+  position: absolute;
+  right: -7px;
+  top: 10px;
+  width: 5px;
+  height: 13px;
+  border-radius: 0 3px 3px 0;
+  background: rgba(0, 0, 0, 0.72);
+}
+.wc-android-battery-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  max-width: 100%;
   border-radius: 5px;
-  display: flex;
-  align-items: center;
-  padding: 2px;
+  background: #111;
 }
-.wc-battery-inner {
-  height: 100%;
-  background: #000;
-  border-radius: 2px;
-  transition: width 0.3s;
+.wc-android-battery strong {
+  position: relative;
+  z-index: 1;
+  color: #fff;
+  font-family: Arial, 'Helvetica Neue', sans-serif;
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -1px;
+  text-rendering: geometricPrecision;
 }
-.wc-battery-tip {
-  width: 4px;
-  height: 10px;
-  background: #000;
-  border-radius: 0 2px 2px 0;
-  margin-left: 2px;
+.wc-android-battery-sparse strong {
+  color: #111;
+}
+.wc-android-battery-low .wc-android-battery-fill,
+.wc-android-battery-low > i {
+  background: #e5484d;
+}
+.wc-android-battery-low {
+  border-color: #e5484d;
+}
+.wc-phone-android .wc-status-icons {
+  gap: 14px;
+}
+.wc-phone-android .wc-time {
+  font-size: 42px;
+  font-weight: 500;
 }
 
 /* Nav bar 132px */
@@ -281,25 +429,56 @@
 }
 
 /* Voice */
+.wc-voice-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: 700px;
+}
+.wc-dialog-right .wc-voice-stack {
+  align-items: flex-end;
+}
 .wc-bubble-voice {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  padding-top: 25px;
+  padding-bottom: 25px;
 }
-.wc-voice-bars {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.wc-voice-bars span {
-  display: block;
-  width: 6px;
-  background: #333;
-  border-radius: 3px;
+.wc-voice-wave {
+  width: 34px;
+  height: 49px;
+  flex: 0 0 auto;
+  object-fit: contain;
 }
 .wc-voice-dur {
   font-size: 42px;
-  padding: 0 20px;
+  padding: 0 12px;
   white-space: nowrap;
+}
+.wc-voice-unread {
+  position: absolute;
+  right: -62px;
+  top: 20px;
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  background: #e75e58;
+}
+.wc-voice-transcript {
+  display: inline-block;
+  width: fit-content;
+  max-width: 700px;
+  margin-top: 14px;
+  padding: 22px 30px;
+  border-radius: 14px;
+  background: #fff;
+  color: #111;
+  font-size: 48px;
+  line-height: 1.5;
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* Red packet & Transfer */
@@ -310,7 +489,7 @@
   padding: 0 !important;
   min-height: auto !important;
   border-radius: 15px;
-  overflow: hidden;
+  overflow: visible;
 }
 .wc-rp-content {
   display: flex;
@@ -329,19 +508,28 @@
   left: 0;
 }
 .wc-rp-icon {
-  width: 102px;
+  width: 120px;
   height: 120px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 80px;
   flex-shrink: 0;
+}
+.wc-rp-icon img {
+  width: 120px;
+  height: 120px;
+  display: block;
+  object-fit: contain;
+}
+.wc-rp-icon-redpacket {
+  width: 111px;
+  padding-left: 9px;
 }
 .wc-rp-info {
   flex: 1;
   display: flex;
   flex-direction: column;
-  margin-left: 20px;
+  margin-left: 30px;
   overflow: hidden;
 }
 .wc-rp-info span {
