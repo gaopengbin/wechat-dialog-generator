@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://gaopengbin.github.io/wechat-dialog-generator/sitemap.xml
