@@ -13,14 +13,19 @@ export interface ChatMessage {
   content: string;
   params: {
     duration?: number;
+    transcript?: string;
     amount?: string;
     remark?: string;
   };
 }
 
 export interface PhoneSettings {
+  platform: 'ios' | 'android';
   time: string;
   signal: number;
+  secondarySignal: number;
+  simMode: 'single' | 'dual';
+  wifiEnabled: boolean;
   battery: number;
   contactName: string;
   unreadCount: number;

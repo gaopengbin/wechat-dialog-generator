@@ -13,7 +13,7 @@ const IMG_REG = /^\[图片\]\s*(.*)$/;
 const IMG_MD_REG = /^!\[.*?\]\((.+?)\)$/;
 const RP_REG = /^\[红包\]\s*(.*)$/;
 const TRANSFER_REG = /^\[转账\]\s*(.*)$/;
-const VOICE_REG = /^\[语音\]\s*(\d+)?$/;
+const VOICE_REG = /^\[语音\]\s*(\d+)?(?:\s*[:：]\s*(.+))?$/;
 
 function parseSpecialContent(content: string): { type: MessageType; content: string; params: ChatMessage['params'] } | null {
   // [图片]url 或 ![alt](url)
@@ -30,9 +30,16 @@ function parseSpecialContent(content: string): { type: MessageType; content: str
     const parts = (m[1] || '0').split(/[:：]/);
     return { type: 'transfer', content: '', params: { amount: parts[0] || '0', remark: parts[1] || '转账' } };
   }
-  // [语音]秒数
+  // [语音]秒数 或 [语音]秒数:转写内容
   m = content.match(VOICE_REG);
-  if (m) return { type: 'voice', content: '', params: { duration: parseInt(m[1] || '3', 10) } };
+  if (m) return {
+    type: 'voice',
+    content: '',
+    params: {
+      duration: parseInt(m[1] || '3', 10),
+      transcript: m[2]?.trim() || undefined,
+    },
+  };
   return null;
 }
 
@@ -57,6 +64,7 @@ export function parseChatRecord(text: string): ParseResult {
   const lines = text.split('\n');
   const orderedNames: string[] = [];
   const seenNames = new Set<string>();
+  let hasExplicitSelf = false;
 
   // First pass: collect all unique sender names in order
   lines.forEach(rawLine => {
@@ -71,7 +79,10 @@ export function parseChatRecord(text: string): ParseResult {
     const mdMatch = line.match(MD_MSG_REG);
     if (mdMatch) {
       const name = mdMatch[1].replace(/\s+/g, '').trim();
-      if (!seenNames.has(name) && !SELF_ALIASES.has(name)) {
+      const nameLower = name.toLowerCase();
+      if (SELF_ALIASES.has(name) || SELF_ALIASES.has(nameLower)) {
+        hasExplicitSelf = true;
+      } else if (!seenNames.has(name)) {
         seenNames.add(name);
         orderedNames.push(name);
       }
@@ -80,17 +91,26 @@ export function parseChatRecord(text: string): ParseResult {
     const colonIdx = line.search(/[：:]/);
     if (colonIdx > 0) {
       const name = line.slice(0, colonIdx).trim().replace(/\*\*/g, '');
-      if (!seenNames.has(name) && !SELF_ALIASES.has(name)) {
+      const nameLower = name.toLowerCase();
+      if (SELF_ALIASES.has(name) || SELF_ALIASES.has(nameLower)) {
+        hasExplicitSelf = true;
+      } else if (!seenNames.has(name)) {
         seenNames.add(name);
         orderedNames.push(name);
       }
     }
   });
 
-  // Build users list: first name is "self"
+  // Explicit aliases always represent self. Without an alias, preserve the
+  // original behavior where the first sender is treated as self.
   const users: ChatUser[] = [];
   let nextId = 1;
-  if (orderedNames.length > 0) {
+  if (hasExplicitSelf) {
+    users.push({ id: nextId++, name: '我', avatar: null });
+    for (const name of orderedNames) {
+      users.push({ id: nextId++, name, avatar: null });
+    }
+  } else if (orderedNames.length > 0) {
     users.push({ id: nextId++, name: orderedNames[0], avatar: null });
     for (let i = 1; i < orderedNames.length; i++) {
       users.push({ id: nextId++, name: orderedNames[i], avatar: null });

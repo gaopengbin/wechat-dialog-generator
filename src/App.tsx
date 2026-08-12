@@ -20,8 +20,12 @@ function App() {
   const [users, setUsers] = useState<ChatUser[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [settings, setSettings] = useState<PhoneSettings>({
+    platform: 'ios',
     time: '12:02',
     signal: 4,
+    secondarySignal: 3,
+    simMode: 'single',
+    wifiEnabled: true,
     battery: 60,
     contactName: '',
     unreadCount: 1,

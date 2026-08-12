@@ -24,6 +24,7 @@ export function MessageEditor({ users, selfId, onAddMessage }: MessageEditorProp
   const [remark, setRemark] = useState('');
   const [amount, setAmount] = useState('');
   const [duration, setDuration] = useState('3');
+  const [voiceTranscript, setVoiceTranscript] = useState('');
   const [timeContent, setTimeContent] = useState('');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const imgRef = useRef<HTMLInputElement>(null);
@@ -88,9 +89,13 @@ export function MessageEditor({ users, selfId, onAddMessage }: MessageEditorProp
           type: 'voice',
           senderId: senderId as number,
           content: '',
-          params: { duration: parseInt(duration || '3', 10) },
+          params: {
+            duration: parseInt(duration || '3', 10),
+            transcript: voiceTranscript.trim() || undefined,
+          },
         });
         setDuration('3');
+        setVoiceTranscript('');
         break;
     }
   };
@@ -194,6 +199,14 @@ export function MessageEditor({ users, selfId, onAddMessage }: MessageEditorProp
               style={{ width: 100 }}
             />
             <span className="me-hint">秒</span>
+            <textarea
+              className="me-textarea"
+              placeholder="转文字内容（可选）"
+              value={voiceTranscript}
+              onChange={e => setVoiceTranscript(e.target.value)}
+              rows={2}
+              style={{ flex: 1 }}
+            />
           </div>
         )}
       </>
