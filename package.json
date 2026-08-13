@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test": "tsx --test src/lib/parser.test.ts",
+    "test": "tsx --test src/lib/*.test.ts",
     "lint": "eslint .",
     "preview": "vite preview"
   },

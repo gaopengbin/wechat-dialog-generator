@@ -7,7 +7,19 @@ import { MessageEditor } from '@/components/MessageEditor';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { PhonePreview } from '@/components/PhonePreview';
 import { GrowthContent } from '@/components/GrowthContent';
+import { ProjectPanel } from '@/components/ProjectPanel';
 import { parseChatRecord } from '@/lib/parser';
+import {
+  activeProjectStorageKey,
+  copyProject,
+  deleteProject,
+  listProjects,
+  projectHasContent,
+  projectName,
+  saveProject,
+  type ChatProject,
+  type ChatProjectSnapshot,
+} from '@/lib/project-store';
 import {
   messageCountBucket,
   participantCountBucket,
@@ -15,33 +27,160 @@ import {
 } from '@/lib/product-analytics';
 import type { ChatUser, ChatMessage, PhoneSettings } from '@/types';
 
+const defaultSettings: PhoneSettings = {
+  platform: 'ios',
+  time: '12:02',
+  signal: 4,
+  secondarySignal: 3,
+  simMode: 'single',
+  wifiEnabled: true,
+  battery: 60,
+  contactName: '',
+  unreadCount: 1,
+  selfBubbleColor: '#95ec69',
+  otherBubbleColor: '#ffffff',
+};
+
 function App() {
   const [importText, setImportText] = useState('');
   const [users, setUsers] = useState<ChatUser[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [settings, setSettings] = useState<PhoneSettings>({
-    platform: 'ios',
-    time: '12:02',
-    signal: 4,
-    secondarySignal: 3,
-    simMode: 'single',
-    wifiEnabled: true,
-    battery: 60,
-    contactName: '',
-    unreadCount: 1,
-    selfBubbleColor: '#95ec69',
-    otherBubbleColor: '#ffffff',
-  });
+  const [settings, setSettings] = useState<PhoneSettings>(defaultSettings);
   const [selfId, setSelfId] = useState<number | null>(null);
   const [toast, setToast] = useState('');
+  const [projects, setProjects] = useState<ChatProject[]>([]);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [activeProjectName, setActiveProjectName] = useState('');
+  const [activeProjectCreatedAt, setActiveProjectCreatedAt] = useState<string | null>(null);
+  const [storageReady, setStorageReady] = useState(false);
+  const [storageAvailable, setStorageAvailable] = useState(true);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const phoneRef = useRef<HTMLDivElement | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const dialogTracked = useRef(false);
   const editorRef = useRef<HTMLElement | null>(null);
+  const restoredProjectTracked = useRef(false);
+  const skipNextSave = useRef(false);
 
   useEffect(() => {
     void trackProductEvent('page_view');
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function restoreWorkspace() {
+      if (!('indexedDB' in window)) {
+        setStorageAvailable(false);
+        setStorageReady(true);
+        return;
+      }
+      try {
+        const storedProjects = await listProjects();
+        if (cancelled) return;
+        setProjects(storedProjects);
+
+        let storedId: string | null = null;
+        try {
+          storedId = localStorage.getItem(activeProjectStorageKey);
+        } catch {
+          storedId = null;
+        }
+        const active = storedProjects.find(project => project.id === storedId);
+        if (active) {
+          skipNextSave.current = true;
+          setImportText(active.importText);
+          setUsers(active.users);
+          setMessages(active.messages);
+          setSettings(active.settings);
+          setSelfId(active.selfId);
+          setActiveProjectId(active.id);
+          setActiveProjectName(active.name);
+          setActiveProjectCreatedAt(active.createdAt);
+          setSaveState('saved');
+          dialogTracked.current = active.messages.length > 0;
+          if (!restoredProjectTracked.current) {
+            restoredProjectTracked.current = true;
+            void trackProductEvent('project_reopened', {
+              message_count_bucket: messageCountBucket(active.messages.length),
+            });
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setStorageAvailable(false);
+          setSaveState('error');
+        }
+      } finally {
+        if (!cancelled) setStorageReady(true);
+      }
+    }
+
+    void restoreWorkspace();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!storageReady || !storageAvailable) return;
+    if (skipNextSave.current) {
+      skipNextSave.current = false;
+      return;
+    }
+
+    const snapshot: ChatProjectSnapshot = { importText, users, messages, settings, selfId };
+    if (!projectHasContent(snapshot)) return;
+
+    setSaveState('saving');
+    const timer = window.setTimeout(() => {
+      const now = new Date().toISOString();
+      const isNewProject = activeProjectId === null;
+      const id = activeProjectId ?? crypto.randomUUID();
+      const name = activeProjectName.trim() || projectName(snapshot);
+      const project: ChatProject = {
+        ...snapshot,
+        id,
+        name,
+        createdAt: activeProjectCreatedAt ?? now,
+        updatedAt: now,
+        version: 1,
+      };
+
+      void saveProject(project).then(() => {
+        if (isNewProject) skipNextSave.current = true;
+        setActiveProjectId(id);
+        setActiveProjectName(name);
+        setActiveProjectCreatedAt(project.createdAt);
+        setProjects(current => [project, ...current.filter(item => item.id !== id)]);
+        setSaveState('saved');
+        try {
+          localStorage.setItem(activeProjectStorageKey, id);
+        } catch {
+          // IndexedDB remains the source of truth when localStorage is unavailable.
+        }
+        if (isNewProject) {
+          void trackProductEvent('project_created', {
+            creation_source: messages.length > 0 ? 'editor' : 'import_draft',
+          });
+        }
+      }).catch(() => {
+        setStorageAvailable(false);
+        setSaveState('error');
+      });
+    }, 700);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    activeProjectCreatedAt,
+    activeProjectId,
+    activeProjectName,
+    importText,
+    messages,
+    selfId,
+    settings,
+    storageAvailable,
+    storageReady,
+    users,
+  ]);
 
   useEffect(() => {
     if (dialogTracked.current || messages.length === 0) return;
@@ -57,6 +196,122 @@ function App() {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(''), 2500);
   }, []);
+
+  const persistCurrentProject = useCallback(async () => {
+    if (!storageAvailable) return;
+    const snapshot: ChatProjectSnapshot = { importText, users, messages, settings, selfId };
+    if (!projectHasContent(snapshot)) return;
+    const now = new Date().toISOString();
+    const id = activeProjectId ?? crypto.randomUUID();
+    const project: ChatProject = {
+      ...snapshot,
+      id,
+      name: activeProjectName.trim() || projectName(snapshot),
+      createdAt: activeProjectCreatedAt ?? now,
+      updatedAt: now,
+      version: 1,
+    };
+    await saveProject(project);
+    setProjects(current => [project, ...current.filter(item => item.id !== id)]);
+    if (!activeProjectId) {
+      void trackProductEvent('project_created', {
+        creation_source: messages.length > 0 ? 'editor' : 'import_draft',
+      });
+    }
+  }, [
+    activeProjectCreatedAt,
+    activeProjectId,
+    activeProjectName,
+    importText,
+    messages,
+    selfId,
+    settings,
+    storageAvailable,
+    users,
+  ]);
+
+  const resetEditor = useCallback(() => {
+    skipNextSave.current = true;
+    setImportText('');
+    setUsers([]);
+    setMessages([]);
+    setSettings(defaultSettings);
+    setSelfId(null);
+    setActiveProjectId(null);
+    setActiveProjectName('');
+    setActiveProjectCreatedAt(null);
+    setSaveState('idle');
+    dialogTracked.current = false;
+    try {
+      localStorage.removeItem(activeProjectStorageKey);
+    } catch {
+      // The editor can still start a new in-memory project.
+    }
+  }, []);
+
+  const handleCreateProject = useCallback(async () => {
+    try {
+      await persistCurrentProject();
+      resetEditor();
+      showToast('已新建空白对话，上一份内容已自动保存');
+    } catch {
+      showToast('保存当前项目失败，请稍后重试');
+    }
+  }, [persistCurrentProject, resetEditor, showToast]);
+
+  const handleOpenProject = useCallback(async (project: ChatProject) => {
+    if (project.id === activeProjectId) return;
+    try {
+      await persistCurrentProject();
+    } catch {
+      showToast('当前项目保存失败，暂未切换');
+      return;
+    }
+    skipNextSave.current = true;
+    setImportText(project.importText);
+    setUsers(project.users);
+    setMessages(project.messages);
+    setSettings(project.settings);
+    setSelfId(project.selfId);
+    setActiveProjectId(project.id);
+    setActiveProjectName(project.name);
+    setActiveProjectCreatedAt(project.createdAt);
+    setSaveState('saved');
+    dialogTracked.current = project.messages.length > 0;
+    try {
+      localStorage.setItem(activeProjectStorageKey, project.id);
+    } catch {
+      // Project switching still works for the current page session.
+    }
+    void trackProductEvent('project_reopened', {
+      message_count_bucket: messageCountBucket(project.messages.length),
+    });
+    showToast(`已打开“${project.name}”`);
+  }, [activeProjectId, persistCurrentProject, showToast]);
+
+  const handleDuplicateProject = useCallback(async (source: ChatProject) => {
+    try {
+      const duplicate = copyProject(source);
+      await saveProject(duplicate);
+      setProjects(current => [duplicate, ...current]);
+      void trackProductEvent('project_duplicated');
+      showToast(`已复制“${source.name}”`);
+    } catch {
+      showToast('复制项目失败');
+    }
+  }, [showToast]);
+
+  const handleDeleteProject = useCallback(async (project: ChatProject) => {
+    if (!window.confirm(`确定删除“${project.name}”吗？此操作无法撤销。`)) return;
+    try {
+      await deleteProject(project.id);
+      setProjects(current => current.filter(item => item.id !== project.id));
+      if (project.id === activeProjectId) resetEditor();
+      showToast('项目已从本机删除');
+    } catch {
+      showToast('删除项目失败');
+    }
+  }, [activeProjectId, resetEditor, showToast]);
 
   const handleUseTemplate = useCallback((content: string) => {
     setImportText(content);
@@ -355,6 +610,19 @@ function App() {
           <span>无需登录</span>
         </div>
       </section>
+
+      <ProjectPanel
+        projects={projects}
+        activeProjectId={activeProjectId}
+        activeProjectName={activeProjectName}
+        saveState={saveState}
+        storageAvailable={storageAvailable}
+        onCreate={() => { void handleCreateProject(); }}
+        onOpen={project => { void handleOpenProject(project); }}
+        onRename={setActiveProjectName}
+        onDuplicate={project => { void handleDuplicateProject(project); }}
+        onDelete={project => { void handleDeleteProject(project); }}
+      />
 
       <main className="app-main" id="editor" ref={editorRef}>
         <div className="app-left">

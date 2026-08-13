@@ -7,7 +7,13 @@ const visitorStorageKey = 'wechat-dialog-generator:analytics-visitor'
 const sessionStorageKey = 'wechat-dialog-generator:analytics-session'
 const attributionStorageKey = 'wechat-dialog-generator:analytics-attribution'
 
-type EventName = 'page_view' | 'dialog_created' | 'image_exported'
+type EventName =
+  | 'page_view'
+  | 'dialog_created'
+  | 'image_exported'
+  | 'project_created'
+  | 'project_reopened'
+  | 'project_duplicated'
 type Properties = Record<string, string>
 
 function identifier(storage: Storage, key: string) {
