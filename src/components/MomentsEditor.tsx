@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { toCanvas } from 'html-to-image'
 import { Camera, Download, Heart, ImagePlus, MapPin, MessageCircle, Plus, Trash2 } from 'lucide-react'
 import { loadMomentProject, saveMomentProject, type MomentProject } from '@/lib/project-store'
+import { WechatPhoneChrome } from '@/components/WechatPhoneChrome'
 
 const emptyMoment: MomentProject = {
   id: 'active',
@@ -160,10 +161,9 @@ export function MomentsEditor({ onToast }: MomentsEditorProps) {
 
       <section className="moments-preview-column">
         <div className="moments-preview-label"><span>实时预览</span><small>模拟界面 · 仅用于创作与设计演示</small></div>
-        <div className="moments-phone" ref={previewRef}>
-          <div className="moments-status"><span>12:02</span><span>▮▮▮ ᯤ ▰</span></div>
-          <div className="moments-nav"><span>‹</span><strong>朋友圈</strong><Camera size={18} /></div>
-          <div className="moments-cover"><div className="moments-cover-shade" /><span>微信内容创作工具箱</span></div>
+        <div ref={previewRef}>
+          <WechatPhoneChrome className="moments-phone-real" title="朋友圈" rightAction="camera">
+          <div className="moments-cover"><div className="moments-cover-shade" /><div className="moments-profile"><strong>{draft.author || '未命名用户'}</strong><div>{draft.avatar ? <img src={draft.avatar} alt="" /> : draft.author.slice(0, 1) || '我'}</div></div></div>
           <article className="moment-post">
             <div className="moment-avatar">{draft.avatar ? <img src={draft.avatar} alt="" /> : draft.author.slice(0, 1) || '我'}</div>
             <div className="moment-main">
@@ -179,7 +179,7 @@ export function MomentsEditor({ onToast }: MomentsEditorProps) {
               {draft.likes.length === 0 && draft.comments.length === 0 && <div className="moment-empty-actions"><Heart size={14} /><MessageCircle size={14} /></div>}
             </div>
           </article>
-          <div className="simulation-watermark">模拟界面 · 非真实微信内容</div>
+          </WechatPhoneChrome>
         </div>
       </section>
     </main>
