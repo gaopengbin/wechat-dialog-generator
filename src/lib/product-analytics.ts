@@ -5,6 +5,7 @@ const endpoint = import.meta.env.VITE_PRODUCT_ANALYTICS_ENDPOINT ||
 
 const visitorStorageKey = 'wechat-dialog-generator:analytics-visitor'
 const sessionStorageKey = 'wechat-dialog-generator:analytics-session'
+const attributionStorageKey = 'wechat-dialog-generator:analytics-attribution'
 
 type EventName = 'page_view' | 'dialog_created' | 'image_exported'
 type Properties = Record<string, string>
@@ -19,18 +20,38 @@ function identifier(storage: Storage, key: string) {
 
 function acquisition(): Properties {
   const parameters = new URLSearchParams(window.location.search)
-  let referrerHost = ''
+  let firstTouch: Properties = {}
+
   try {
-    referrerHost = document.referrer ? new URL(document.referrer).hostname : ''
+    const stored = sessionStorage.getItem(attributionStorageKey)
+    if (stored) firstTouch = JSON.parse(stored) as Properties
   } catch {
-    referrerHost = ''
+    firstTouch = {}
   }
+
+  if (Object.keys(firstTouch).length === 0) {
+    let referrerHost = ''
+    try {
+      referrerHost = document.referrer ? new URL(document.referrer).hostname : ''
+    } catch {
+      referrerHost = ''
+    }
+    firstTouch = {
+      ...(referrerHost ? { referrer_host: referrerHost.slice(0, 128) } : {}),
+      ...(parameters.get('utm_source') ? { source: parameters.get('utm_source')!.slice(0, 64) } : {}),
+      ...(parameters.get('utm_medium') ? { medium: parameters.get('utm_medium')!.slice(0, 64) } : {}),
+      ...(parameters.get('utm_campaign') ? { campaign: parameters.get('utm_campaign')!.slice(0, 96) } : {}),
+    }
+    try {
+      sessionStorage.setItem(attributionStorageKey, JSON.stringify(firstTouch))
+    } catch {
+      // Storage can be unavailable in privacy modes; current-page attribution still works.
+    }
+  }
+
   return {
     path: window.location.pathname.slice(0, 256),
-    ...(referrerHost ? { referrer_host: referrerHost.slice(0, 128) } : {}),
-    ...(parameters.get('utm_source') ? { source: parameters.get('utm_source')!.slice(0, 64) } : {}),
-    ...(parameters.get('utm_medium') ? { medium: parameters.get('utm_medium')!.slice(0, 64) } : {}),
-    ...(parameters.get('utm_campaign') ? { campaign: parameters.get('utm_campaign')!.slice(0, 96) } : {}),
+    ...firstTouch,
   }
 }
 
