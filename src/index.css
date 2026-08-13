@@ -341,6 +341,32 @@ body {
 .wechat-chrome-watermark { position: absolute; z-index: 6; right: 15px; bottom: 17px; color: rgba(42,48,45,.3); font-size: 8px; letter-spacing: .04em; pointer-events: none; }
 .wechat-chrome-home-indicator { position: absolute; z-index: 7; bottom: 6px; left: 50%; width: 112px; height: 4px; border-radius: 999px; background: rgba(10,10,10,.72); transform: translateX(-50%); }
 
+.wechat-shared-header.is-compact { background: #fff; color: #111; }
+.wechat-shared-header.is-compact .wc-status-bar { height: 38px; align-items: flex-end; padding: 0 20px 7px; }
+.wechat-shared-header.is-compact .wc-time { font-size: 12px; font-weight: 650; letter-spacing: .01em; }
+.wechat-shared-header.is-compact .wc-status-icons { height: 14px; align-items: center; gap: 6px; }
+.wechat-shared-header.is-compact .wc-signal-group { height: 13px; align-items: center; gap: 5px; }
+.wechat-shared-header.is-compact .wc-official-signal-single { width: 17px; height: 12px; }
+.wechat-shared-header.is-compact .wc-official-signal-single img { width: 42px; height: 17px; left: -12.5px; top: -2.8px; }
+.wechat-shared-header.is-compact .wc-official-signal-dual { width: 14px; height: 12px; }
+.wechat-shared-header.is-compact .wc-official-signal-dual img { width: 34px; height: 14px; left: -9.7px; top: -1.6px; }
+.wechat-shared-header.is-compact .wc-official-signal-dual .wc-official-signal-secondary img { top: -8.5px; }
+.wechat-shared-header.is-compact .wc-official-wifi { width: 15px; height: 12px; }
+.wechat-shared-header.is-compact .wc-official-wifi img { width: 30px; height: 12px; left: -7px; top: 0; }
+.wechat-shared-header.is-compact .wc-battery-wrap { width: 22px; height: 11px; padding: 2px 5px 2px 2px; background-size: 22px 11px; }
+.wechat-shared-header.is-compact .wc-battery-level,
+.wechat-shared-header.is-compact .wc-battery-level i { height: 7px; border-radius: 1px; }
+.wechat-shared-header.is-compact .wc-nav { height: 52px; padding: 0 13px; border-bottom: .5px solid rgba(0,0,0,.08); }
+.wechat-shared-header.is-compact .wc-nav-left,
+.wechat-shared-header.is-compact .wc-nav-right { width: 42px; }
+.wechat-shared-header.is-compact .wc-nav-left svg { width: 12px; height: 24px; }
+.wechat-shared-header.is-compact .wc-nav-center span { overflow: hidden; font-size: 16px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
+.wechat-shared-header.is-compact .wc-nav-dots { gap: 3px; }
+.wechat-shared-header.is-compact .wc-nav-dots i { width: 4px; height: 4px; background: currentColor; }
+.wechat-shared-camera { position: relative; width: 20px; height: 14px; display: inline-block; border: 1.7px solid currentColor; border-radius: 2px; }
+.wechat-shared-camera::before { content: ''; position: absolute; top: -4px; left: 5px; width: 8px; height: 4px; border: 1.7px solid currentColor; border-bottom: 0; border-radius: 2px 2px 0 0; }
+.wechat-shared-camera::after { content: ''; position: absolute; top: 3px; left: 7px; width: 4px; height: 4px; border: 1.4px solid currentColor; border-radius: 50%; }
+
 .scene-avatar-field { align-items: start; }
 .scene-avatar-control { position: relative; display: flex; align-items: center; gap: 10px; }
 .scene-avatar-control > input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
@@ -370,8 +396,12 @@ body {
 .payment-bill-section svg { color: #aaa; }
 .payment-tip { display: block; margin-top: 24px; color: #d5a15b; font-size: 9px; }
 
-.scene-redpacket .wechat-chrome-status,
-.scene-redpacket .wechat-chrome-nav { border-color: transparent; background: #ef5b4a; color: #fff; }
+.scene-redpacket .wechat-shared-header,
+.scene-redpacket .wechat-shared-header .wc-status-bar,
+.scene-redpacket .wechat-shared-header .wc-nav { border-color: transparent; background: #ef5b4a; color: #fff; }
+.scene-redpacket .wechat-shared-header .wc-official-signal img,
+.scene-redpacket .wechat-shared-header .wc-official-wifi img { filter: brightness(0) invert(1); }
+.scene-redpacket .wechat-shared-header .wc-battery-wrap { filter: invert(1); }
 .scene-redpacket .wechat-chrome-content { background: #f5f5f5; }
 .scene-redpacket .wechat-chrome-watermark { color: rgba(55,45,42,.28); }
 .redpacket-preview { min-height: 670px; padding: 0; background: #f5f5f5; color: #333; text-align: left; }
