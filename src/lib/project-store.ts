@@ -1,8 +1,10 @@
 import type { ChatMessage, ChatUser, PhoneSettings } from '@/types'
 
 const databaseName = 'wechat-dialog-generator'
-const databaseVersion = 1
+const databaseVersion = 3
 const projectStore = 'projects'
+const momentStore = 'moment-projects'
+const sceneStore = 'scene-projects'
 
 export const activeProjectStorageKey = 'wechat-dialog-generator:active-project'
 
@@ -18,6 +20,35 @@ export interface ChatProject extends ChatProjectSnapshot {
   id: string
   name: string
   createdAt: string
+  updatedAt: string
+  version: 1
+}
+
+export interface MomentComment {
+  id: string
+  author: string
+  content: string
+}
+
+export interface MomentProject {
+  id: 'active'
+  author: string
+  avatar: string | null
+  content: string
+  images: string[]
+  location: string
+  timeLabel: string
+  likes: string[]
+  comments: MomentComment[]
+  updatedAt: string
+  version: 1
+}
+
+export type WechatSceneKind = 'payment' | 'redpacket' | 'profile' | 'group'
+
+export interface WechatSceneProject {
+  id: WechatSceneKind
+  fields: Record<string, string>
   updatedAt: string
   version: 1
 }
@@ -38,10 +69,47 @@ function openDatabase() {
         const store = database.createObjectStore(projectStore, { keyPath: 'id' })
         store.createIndex('updatedAt', 'updatedAt')
       }
+      if (!database.objectStoreNames.contains(momentStore)) {
+        database.createObjectStore(momentStore, { keyPath: 'id' })
+      }
+      if (!database.objectStoreNames.contains(sceneStore)) {
+        database.createObjectStore(sceneStore, { keyPath: 'id' })
+      }
     }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error ?? new Error('Unable to open IndexedDB'))
   })
+}
+
+export async function loadMomentProject() {
+  return withNamedStore<MomentProject | undefined>(momentStore, 'readonly', store => store.get('active'))
+}
+
+export async function saveMomentProject(project: MomentProject) {
+  await withNamedStore(momentStore, 'readwrite', store => store.put(project))
+  return project
+}
+
+export async function loadWechatScene(kind: WechatSceneKind) {
+  return withNamedStore<WechatSceneProject | undefined>(sceneStore, 'readonly', store => store.get(kind))
+}
+
+export async function saveWechatScene(project: WechatSceneProject) {
+  await withNamedStore(sceneStore, 'readwrite', store => store.put(project))
+  return project
+}
+
+async function withNamedStore<T>(
+  name: string,
+  mode: IDBTransactionMode,
+  operation: (store: IDBObjectStore) => IDBRequest<T>,
+) {
+  const database = await openDatabase()
+  try {
+    return await requestResult(operation(database.transaction(name, mode).objectStore(name)))
+  } finally {
+    database.close()
+  }
 }
 
 async function withStore<T>(

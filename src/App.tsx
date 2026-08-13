@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { toCanvas } from 'html-to-image';
-import { Download, Copy, Image as ImageIcon, MessageSquare, Share2, ShieldCheck, Sparkles, Zap } from 'lucide-react';
+import { CircleDollarSign, Download, Copy, Gift, Image as ImageIcon, MessageSquare, Share2, ShieldCheck, Sparkles, UserRound, UsersRound, Zap } from 'lucide-react';
 import { ImportPanel } from '@/components/ImportPanel';
 import { UserAvatarManager } from '@/components/UserAvatarManager';
 import { MessageEditor } from '@/components/MessageEditor';
@@ -8,6 +8,8 @@ import { SettingsPanel } from '@/components/SettingsPanel';
 import { PhonePreview } from '@/components/PhonePreview';
 import { GrowthContent } from '@/components/GrowthContent';
 import { ProjectPanel } from '@/components/ProjectPanel';
+import { MomentsEditor } from '@/components/MomentsEditor';
+import { WechatSceneEditor } from '@/components/WechatSceneEditor';
 import { parseChatRecord } from '@/lib/parser';
 import {
   activeProjectStorageKey,
@@ -42,6 +44,16 @@ const defaultSettings: PhoneSettings = {
 };
 
 function App() {
+  const [activeTool, setActiveTool] = useState<'chat' | 'moments' | 'payment' | 'redpacket' | 'profile' | 'group'>(() => {
+    try {
+      const stored = localStorage.getItem('wechat-dialog-generator:active-tool');
+      return ['moments', 'payment', 'redpacket', 'profile', 'group'].includes(stored ?? '')
+        ? stored as 'moments' | 'payment' | 'redpacket' | 'profile' | 'group'
+        : 'chat';
+    } catch {
+      return 'chat';
+    }
+  });
   const [importText, setImportText] = useState('');
   const [users, setUsers] = useState<ChatUser[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -65,6 +77,14 @@ function App() {
   useEffect(() => {
     void trackProductEvent('page_view');
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('wechat-dialog-generator:active-tool', activeTool);
+    } catch {
+      // Tool switching still works for the current page session.
+    }
+  }, [activeTool]);
 
   useEffect(() => {
     let cancelled = false;
@@ -566,9 +586,9 @@ function App() {
       <header className="app-header">
         <h1>
           <MessageSquare size={22} />
-          微信对话生成器
+          微信创作工具箱
         </h1>
-        {!hasMessages && (
+        {!hasMessages && activeTool === 'chat' && (
           <nav className="app-nav" aria-label="页面导航">
             <a href="#editor">开始制作</a>
             <a href="#templates">模板</a>
@@ -576,7 +596,7 @@ function App() {
             <a href="#faq">常见问题</a>
           </nav>
         )}
-        {hasMessages && (
+        {hasMessages && activeTool === 'chat' && (
           <div className="app-header-actions">
             <button className="btn btn-primary btn-sm" onClick={handleGenerateImage}>
               <Download size={15} /> 生成图片
@@ -591,14 +611,27 @@ function App() {
         )}
       </header>
 
+      <nav className="wechat-tool-dock" aria-label="微信创作工具箱">
+        <button className={activeTool === 'chat' ? 'is-active' : ''} type="button" onClick={() => setActiveTool('chat')}>
+          <MessageSquare size={18} /><span><strong>聊天生成器</strong><small>对话、群聊与长截图</small></span>
+        </button>
+        <button className={activeTool === 'moments' ? 'is-active' : ''} type="button" onClick={() => setActiveTool('moments')}>
+          <ImageIcon size={18} /><span><strong>朋友圈生成器</strong><small>图文、点赞与评论</small></span>
+        </button>
+        <button className={activeTool === 'payment' ? 'is-active' : ''} type="button" onClick={() => setActiveTool('payment')}><CircleDollarSign size={17} /><span><strong>支付与转账</strong><small>结果与详情页面</small></span></button>
+        <button className={activeTool === 'redpacket' ? 'is-active' : ''} type="button" onClick={() => setActiveTool('redpacket')}><Gift size={17} /><span><strong>红包详情</strong><small>封面与领取结果</small></span></button>
+        <button className={activeTool === 'profile' ? 'is-active' : ''} type="button" onClick={() => setActiveTool('profile')}><UserRound size={17} /><span><strong>个人资料</strong><small>资料与名片页面</small></span></button>
+        <button className={activeTool === 'group' ? 'is-active' : ''} type="button" onClick={() => setActiveTool('group')}><UsersRound size={17} /><span><strong>群信息</strong><small>成员、名称与公告</small></span></button>
+      </nav>
+
       <section className="product-intro">
         <div>
-          <span className="intro-badge"><Sparkles size={14} /> 在线微信聊天截图制作工具</span>
-          <h2>把对话排成一张<br /><em>清晰、自然的聊天截图</em></h2>
-          <p>支持单聊、群聊、图片、语音、红包和转账消息，可导出高清截图与完整长截图。</p>
+          <span className="intro-badge"><Sparkles size={14} /> 微信内容创作工具箱</span>
+          <h2>{activeTool === 'chat' ? <>把对话排成一张<br /><em>清晰、自然的聊天截图</em></> : activeTool === 'moments' ? <>把图文排成一条<br /><em>自然、完整的朋友圈</em></> : <>把微信场景做成一张<br /><em>可编辑的创作素材</em></>}</h2>
+          <p>{activeTool === 'chat' ? '支持单聊、群聊、图片、语音、红包和转账消息，可导出高清截图与完整长截图。' : activeTool === 'moments' ? '自由编辑头像、图文、位置、点赞与评论，实时预览并导出高清朋友圈图片。' : '支付、红包、个人资料与群信息页面统一编辑、本地保存，并导出带安全标识的高清模拟界面。'}</p>
           <div className="intro-actions">
-            <a className="btn btn-primary" href="#editor"><Zap size={16} /> 立即开始制作</a>
-            <a className="btn btn-outline" href="#templates">浏览对话模板</a>
+            <a className="btn btn-primary" href={activeTool === 'chat' ? '#editor' : activeTool === 'moments' ? '#moments-editor' : '#scene-editor'}><Zap size={16} /> 立即开始制作</a>
+            {activeTool === 'chat' && <a className="btn btn-outline" href="#templates">浏览对话模板</a>}
             <button className="btn btn-outline" type="button" onClick={handleShare}>
               <Share2 size={16} /> 分享工具
             </button>
@@ -611,7 +644,7 @@ function App() {
         </div>
       </section>
 
-      <ProjectPanel
+      {activeTool === 'chat' && <ProjectPanel
         projects={projects}
         activeProjectId={activeProjectId}
         activeProjectName={activeProjectName}
@@ -622,9 +655,9 @@ function App() {
         onRename={setActiveProjectName}
         onDuplicate={project => { void handleDuplicateProject(project); }}
         onDelete={project => { void handleDeleteProject(project); }}
-      />
+      />}
 
-      <main className="app-main" id="editor" ref={editorRef}>
+      {activeTool === 'chat' && <main className="app-main" id="editor" ref={editorRef}>
         <div className="app-left">
           <ImportPanel text={importText} onTextChange={setImportText} onImport={handleImport} />
           {users.length > 0 && (
@@ -640,9 +673,14 @@ function App() {
         {hasMessages && (
           <PhonePreview users={users} messages={messages} settings={settings} selfId={selfId} phoneRef={phoneRef} onUpdateMessage={handleUpdateMessage} />
         )}
-      </main>
+      </main>}
 
-      <GrowthContent onUseTemplate={handleUseTemplate} />
+      {activeTool === 'moments' && <MomentsEditor onToast={showToast} />}
+      {(['payment', 'redpacket', 'profile', 'group'] as const).includes(activeTool as 'payment' | 'redpacket' | 'profile' | 'group') && (
+        <WechatSceneEditor key={activeTool} kind={activeTool as 'payment' | 'redpacket' | 'profile' | 'group'} onToast={showToast} />
+      )}
+
+      {activeTool === 'chat' && <GrowthContent onUseTemplate={handleUseTemplate} />}
 
       <footer className="analytics-note">
         聊天内容、头像和生成图片始终在本地处理；站点仅记录匿名访问、创建和导出事件。
