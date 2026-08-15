@@ -488,7 +488,7 @@ function App() {
   const handleShare = useCallback(async () => {
     const shareData = {
       title: '微信对话生成器',
-      text: '在线制作微信聊天截图与长截图，无需登录，内容仅在浏览器本地处理。',
+      text: '在线制作微信聊天截图与长截图，无需登录即可使用，每日免费导出 10 次，内容仅在浏览器本地处理。',
       url: 'https://chat.laogao.xyz/',
     };
 
@@ -802,7 +802,7 @@ function App() {
         <div className="intro-trust">
           <span><ShieldCheck size={18} /> 对话和头像仅在本地处理</span>
           <span>无弹窗广告</span>
-          <span>无需登录</span>
+          <span>游客每日免费 10 次</span>
         </div>
       </section>
 
