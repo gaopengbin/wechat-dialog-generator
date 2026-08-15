@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { toCanvas } from 'html-to-image';
-import { CircleDollarSign, Download, Copy, Gift, Image as ImageIcon, MessageSquare, Share2, ShieldCheck, Sparkles, UserRound, UsersRound, Zap } from 'lucide-react';
+import { BellRing, CircleDollarSign, Download, Copy, Gift, Image as ImageIcon, MessageSquare, Share2, ShieldCheck, Sparkles, UserRound, UsersRound, Zap } from 'lucide-react';
 import { ImportPanel } from '@/components/ImportPanel';
 import { UserAvatarManager } from '@/components/UserAvatarManager';
 import { MessageEditor } from '@/components/MessageEditor';
@@ -10,6 +10,12 @@ import { GrowthContent } from '@/components/GrowthContent';
 import { ProjectPanel } from '@/components/ProjectPanel';
 import { MomentsEditor } from '@/components/MomentsEditor';
 import { WechatSceneEditor } from '@/components/WechatSceneEditor';
+import { AccountDialog } from '@/components/AccountDialog';
+import {
+  OfficialAccountDialog,
+  officialAccountId,
+  type OfficialAccountPlacement,
+} from '@/components/OfficialAccountDialog';
 import { parseChatRecord } from '@/lib/parser';
 import {
   activeProjectStorageKey,
@@ -27,6 +33,18 @@ import {
   participantCountBucket,
   trackProductEvent,
 } from '@/lib/product-analytics';
+import {
+  AccountApiError,
+  consumeAccountExport,
+  consumeGuestExport,
+  guestQuota,
+  loginAccount,
+  logoutAccount,
+  redeemFollowBonus,
+  registerAccount,
+  restoreAccount,
+  type AccountSession,
+} from '@/lib/account-api';
 import type { ChatUser, ChatMessage, PhoneSettings } from '@/types';
 
 const defaultSettings: PhoneSettings = {
@@ -44,6 +62,13 @@ const defaultSettings: PhoneSettings = {
 };
 
 function App() {
+  const [officialAccountPrompt, setOfficialAccountPrompt] = useState<OfficialAccountPlacement | null>(null);
+  const [accountPrompt, setAccountPrompt] = useState(false);
+  const [accountSession, setAccountSession] = useState<AccountSession | null>(null);
+  const [visibleQuota, setVisibleQuota] = useState(() => guestQuota());
+  const [accountBusy, setAccountBusy] = useState(false);
+  const [accountError, setAccountError] = useState('');
+  const [redeemMessage, setRedeemMessage] = useState('');
   const [activeTool, setActiveTool] = useState<'chat' | 'moments' | 'payment' | 'redpacket' | 'profile' | 'group'>(() => {
     try {
       const stored = localStorage.getItem('wechat-dialog-generator:active-tool');
@@ -76,6 +101,14 @@ function App() {
 
   useEffect(() => {
     void trackProductEvent('page_view');
+    void restoreAccount().then(session => {
+      if (session) {
+        setAccountSession(session);
+        setVisibleQuota(session.quota);
+      }
+    }).catch(() => {
+      // The editor remains usable when the account service is temporarily unavailable.
+    });
   }, []);
 
   useEffect(() => {
@@ -216,6 +249,119 @@ function App() {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(''), 2500);
   }, []);
+
+  const openOfficialAccountPrompt = useCallback((placement: OfficialAccountPlacement) => {
+    if (placement === 'export') {
+      try {
+        if (localStorage.getItem('wechat-dialog-generator:official-account-export-prompted')) return;
+        localStorage.setItem('wechat-dialog-generator:official-account-export-prompted', '1');
+      } catch {
+        // The prompt still works when browser storage is unavailable.
+      }
+    }
+    setRedeemMessage('');
+    setOfficialAccountPrompt(placement);
+    void trackProductEvent('official_account_prompt_viewed', { placement });
+  }, []);
+
+  const closeOfficialAccountPrompt = useCallback(() => setOfficialAccountPrompt(null), []);
+
+  const copyOfficialAccountId = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(officialAccountId);
+      void trackProductEvent('official_account_id_copied', {
+        placement: officialAccountPrompt ?? 'header',
+      });
+      showToast('公众号 ID 已复制，请到微信搜索关注');
+    } catch {
+      showToast(`请在微信搜索：${officialAccountId}`);
+    }
+  }, [officialAccountPrompt, showToast]);
+
+  const promptAfterExport = useCallback(() => {
+    window.setTimeout(() => openOfficialAccountPrompt('export'), 700);
+  }, [openOfficialAccountPrompt]);
+
+  const handleLogin = useCallback(async (email: string, password: string) => {
+    setAccountBusy(true);
+    setAccountError('');
+    try {
+      const session = await loginAccount(email, password);
+      setAccountSession(session);
+      setVisibleQuota(session.quota);
+      setAccountPrompt(false);
+      showToast('登录成功');
+    } catch (error) {
+      setAccountError(error instanceof Error ? error.message : '登录失败，请稍后重试');
+    } finally {
+      setAccountBusy(false);
+    }
+  }, [showToast]);
+
+  const handleRegister = useCallback(async (email: string, password: string, displayName: string) => {
+    setAccountBusy(true);
+    setAccountError('');
+    try {
+      const session = await registerAccount(email, password, displayName);
+      setAccountSession(session);
+      setVisibleQuota(session.quota);
+      setAccountPrompt(false);
+      showToast('账户创建成功，已登录');
+    } catch (error) {
+      setAccountError(error instanceof Error ? error.message : '注册失败，请稍后重试');
+    } finally {
+      setAccountBusy(false);
+    }
+  }, [showToast]);
+
+  const handleLogout = useCallback(async () => {
+    setAccountBusy(true);
+    try {
+      await logoutAccount();
+      setAccountSession(null);
+      setVisibleQuota(guestQuota());
+      setAccountPrompt(false);
+      showToast('已退出登录');
+    } finally {
+      setAccountBusy(false);
+    }
+  }, [showToast]);
+
+  const authorizeExport = useCallback(async () => {
+    try {
+      const quota = accountSession ? await consumeAccountExport() : consumeGuestExport();
+      setVisibleQuota(quota);
+      if (accountSession) setAccountSession(current => current ? { ...current, quota } : current);
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '暂时无法确认导出额度';
+      showToast(message);
+      if (error instanceof AccountApiError && error.code === 'quota_exhausted') {
+        if (accountSession) openOfficialAccountPrompt('export');
+        else {
+          setAccountError('今日免费额度已用完，登录后可继续使用并领取关注奖励。');
+          setAccountPrompt(true);
+        }
+      }
+      return false;
+    }
+  }, [accountSession, openOfficialAccountPrompt, showToast]);
+
+  const handleRedeem = useCallback(async (code: string) => {
+    setAccountBusy(true);
+    setRedeemMessage('');
+    try {
+      const result = await redeemFollowBonus(code);
+      setVisibleQuota(result.quota);
+      setAccountSession(current => current ? { ...current, quota: result.quota } : current);
+      setRedeemMessage(`领取成功，已增加 ${result.granted} 次导出额度。`);
+      showToast(`已领取 ${result.granted} 次额外导出额度`);
+    } catch (error) {
+      setRedeemMessage(error instanceof Error ? error.message : '兑换失败，请稍后重试');
+    } finally {
+      setAccountBusy(false);
+    }
+  }, [showToast]);
 
   const persistCurrentProject = useCallback(async () => {
     if (!storageAvailable) return;
@@ -521,6 +667,7 @@ function App() {
     try {
       const canvas = await capturePhone(false);
       if (!canvas) return;
+      if (!(await authorizeExport())) return;
       const link = document.createElement('a');
       link.download = '微信聊天记录_' + Date.now() + '.png';
       link.href = canvas.toDataURL('image/png');
@@ -530,10 +677,11 @@ function App() {
         message_count_bucket: messageCountBucket(messages.length),
       });
       showToast('图片已生成并下载！');
+      promptAfterExport();
     } catch (e: unknown) {
       showToast('生成失败：' + (e instanceof Error ? e.message : String(e)));
     }
-  }, [showToast, capturePhone, messages.length]);
+  }, [showToast, capturePhone, messages.length, promptAfterExport, authorizeExport]);
 
   const handleCopyImage = useCallback(async () => {
     if (!phoneRef.current) return;
@@ -544,12 +692,14 @@ function App() {
       canvas.toBlob(async (blob) => {
         if (!blob) return;
         try {
+          if (!(await authorizeExport())) return;
           await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
           void trackProductEvent('image_exported', {
             capture_mode: 'clipboard',
             message_count_bucket: messageCountBucket(messages.length),
           });
           showToast('图片已复制到剪贴板！');
+          promptAfterExport();
         } catch {
           showToast('复制失败，请使用下载功能');
         }
@@ -557,7 +707,7 @@ function App() {
     } catch {
       showToast('操作失败');
     }
-  }, [showToast, capturePhone, messages.length]);
+  }, [showToast, capturePhone, messages.length, promptAfterExport, authorizeExport]);
 
   const handleGenerateLongImage = useCallback(async () => {
     if (!phoneRef.current) return;
@@ -565,6 +715,7 @@ function App() {
     try {
       const canvas = await capturePhone(true);
       if (!canvas) return;
+      if (!(await authorizeExport())) return;
       const link = document.createElement('a');
       link.download = '微信聊天记录_长截图_' + Date.now() + '.png';
       link.href = canvas.toDataURL('image/png');
@@ -574,10 +725,11 @@ function App() {
         message_count_bucket: messageCountBucket(messages.length),
       });
       showToast('长截图已生成并下载！');
+      promptAfterExport();
     } catch (e: unknown) {
       showToast('生成失败：' + (e instanceof Error ? e.message : String(e)));
     }
-  }, [showToast, capturePhone, messages.length]);
+  }, [showToast, capturePhone, messages.length, promptAfterExport, authorizeExport]);
 
   const hasMessages = messages.length > 0;
 
@@ -588,27 +740,37 @@ function App() {
           <MessageSquare size={22} />
           微信创作工具箱
         </h1>
-        {!hasMessages && activeTool === 'chat' && (
-          <nav className="app-nav" aria-label="页面导航">
-            <a href="#editor">开始制作</a>
-            <a href="#templates">模板</a>
-            <a href="#guide">教程</a>
-            <a href="#faq">常见问题</a>
-          </nav>
-        )}
-        {hasMessages && activeTool === 'chat' && (
-          <div className="app-header-actions">
-            <button className="btn btn-primary btn-sm" onClick={handleGenerateImage}>
-              <Download size={15} /> 生成图片
-            </button>
-            <button className="btn btn-outline btn-sm" onClick={handleCopyImage}>
-              <Copy size={15} /> 复制
-            </button>
-            <button className="btn btn-outline btn-sm" onClick={handleGenerateLongImage}>
-              <ImageIcon size={15} /> 长截图
-            </button>
-          </div>
-        )}
+        <div className="app-header-right">
+          {!hasMessages && activeTool === 'chat' && (
+            <nav className="app-nav" aria-label="页面导航">
+              <a href="#editor">开始制作</a>
+              <a href="#templates">模板</a>
+              <a href="#guide">教程</a>
+              <a href="#faq">常见问题</a>
+            </nav>
+          )}
+          {hasMessages && activeTool === 'chat' && (
+            <div className="app-header-actions">
+              <button className="btn btn-primary btn-sm" onClick={handleGenerateImage}>
+                <Download size={15} /> 生成图片
+              </button>
+              <button className="btn btn-outline btn-sm" onClick={handleCopyImage}>
+                <Copy size={15} /> 复制
+              </button>
+              <button className="btn btn-outline btn-sm" onClick={handleGenerateLongImage}>
+                <ImageIcon size={15} /> 长截图
+              </button>
+            </div>
+          )}
+          <button className="official-account-trigger" type="button" aria-label="关注公众号" onClick={() => openOfficialAccountPrompt('header')}>
+            <BellRing size={15} /><span>关注公众号</span>
+          </button>
+          <button className="account-trigger" type="button" aria-label={`账户：${accountSession?.user.display_name ?? '未登录'}，剩余 ${visibleQuota.total_remaining} 次`} onClick={() => { setAccountError(''); setAccountPrompt(true) }}>
+            <UserRound size={15} />
+            <span>{accountSession ? accountSession.user.display_name : '登录'}</span>
+            <small>{visibleQuota.total_remaining} 次</small>
+          </button>
+        </div>
       </header>
 
       <nav className="wechat-tool-dock" aria-label="微信创作工具箱">
@@ -675,9 +837,9 @@ function App() {
         )}
       </main>}
 
-      {activeTool === 'moments' && <MomentsEditor onToast={showToast} />}
+      {activeTool === 'moments' && <MomentsEditor onToast={showToast} onBeforeExport={authorizeExport} onExportSuccess={promptAfterExport} />}
       {(['payment', 'redpacket', 'profile', 'group'] as const).includes(activeTool as 'payment' | 'redpacket' | 'profile' | 'group') && (
-        <WechatSceneEditor key={activeTool} kind={activeTool as 'payment' | 'redpacket' | 'profile' | 'group'} onToast={showToast} />
+        <WechatSceneEditor key={activeTool} kind={activeTool as 'payment' | 'redpacket' | 'profile' | 'group'} onToast={showToast} onBeforeExport={authorizeExport} onExportSuccess={promptAfterExport} />
       )}
 
       {activeTool === 'chat' && <GrowthContent onUseTemplate={handleUseTemplate} />}
@@ -687,6 +849,27 @@ function App() {
       </footer>
 
       {toast && <div className="toast-msg">{toast}</div>}
+      <OfficialAccountDialog
+        open={officialAccountPrompt !== null}
+        placement={officialAccountPrompt ?? 'header'}
+        authenticated={accountSession !== null}
+        busy={accountBusy}
+        redeemMessage={redeemMessage}
+        onClose={closeOfficialAccountPrompt}
+        onCopyId={copyOfficialAccountId}
+        onLogin={() => { closeOfficialAccountPrompt(); setAccountError(''); setAccountPrompt(true) }}
+        onRedeem={handleRedeem}
+      />
+      <AccountDialog
+        open={accountPrompt}
+        session={accountSession}
+        busy={accountBusy}
+        error={accountError}
+        onClose={() => setAccountPrompt(false)}
+        onLogin={handleLogin}
+        onRegister={handleRegister}
+        onLogout={handleLogout}
+      />
     </>
   );
 }

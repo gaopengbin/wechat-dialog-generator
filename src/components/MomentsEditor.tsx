@@ -20,6 +20,8 @@ const emptyMoment: MomentProject = {
 
 interface MomentsEditorProps {
   onToast: (message: string) => void
+  onBeforeExport?: () => Promise<boolean>
+  onExportSuccess?: () => void
 }
 
 function fileAsDataUrl(file: File) {
@@ -31,7 +33,7 @@ function fileAsDataUrl(file: File) {
   })
 }
 
-export function MomentsEditor({ onToast }: MomentsEditorProps) {
+export function MomentsEditor({ onToast, onBeforeExport, onExportSuccess }: MomentsEditorProps) {
   const [draft, setDraft] = useState<MomentProject>(emptyMoment)
   const [ready, setReady] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -103,15 +105,17 @@ export function MomentsEditor({ onToast }: MomentsEditorProps) {
         pixelRatio: 2,
         backgroundColor: '#ffffff',
       })
+      if (onBeforeExport && !(await onBeforeExport())) return
       const link = document.createElement('a')
       link.download = `微信朋友圈_${Date.now()}.png`
       link.href = canvas.toDataURL('image/png')
       link.click()
       onToast('朋友圈图片已下载')
+      onExportSuccess?.()
     } catch {
       onToast('朋友圈图片生成失败')
     }
-  }, [onToast])
+  }, [onBeforeExport, onExportSuccess, onToast])
 
   return (
     <main className="moments-workbench" id="moments-editor">

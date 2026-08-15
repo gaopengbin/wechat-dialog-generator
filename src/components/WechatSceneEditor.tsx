@@ -72,9 +72,11 @@ const sceneDefinitions: Record<WechatSceneKind, {
 interface WechatSceneEditorProps {
   kind: WechatSceneKind
   onToast: (message: string) => void
+  onBeforeExport?: () => Promise<boolean>
+  onExportSuccess?: () => void
 }
 
-export function WechatSceneEditor({ kind, onToast }: WechatSceneEditorProps) {
+export function WechatSceneEditor({ kind, onToast, onBeforeExport, onExportSuccess }: WechatSceneEditorProps) {
   const definition = sceneDefinitions[kind]
   const [project, setProject] = useState<WechatSceneProject>({ id: kind, fields: definition.defaults, updatedAt: new Date(0).toISOString(), version: 1 })
   const [ready, setReady] = useState(false)
@@ -117,11 +119,13 @@ export function WechatSceneEditor({ kind, onToast }: WechatSceneEditorProps) {
     onToast('正在生成模拟页面…')
     try {
       const canvas = await toCanvas(previewRef.current, { pixelRatio: 2, backgroundColor: '#f5f5f5' })
+      if (onBeforeExport && !(await onBeforeExport())) return
       const link = document.createElement('a')
       link.download = `微信${definition.title}_${Date.now()}.png`
       link.href = canvas.toDataURL('image/png')
       link.click()
       onToast('图片已下载')
+      onExportSuccess?.()
     } catch {
       onToast('图片生成失败')
     }
