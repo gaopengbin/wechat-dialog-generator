@@ -1,7 +1,7 @@
 const apiRoot = import.meta.env.VITE_ACCOUNT_API_ENDPOINT ||
   (['gaopengbin.github.io', 'chat.laogao.xyz'].includes(window.location.hostname)
-    ? 'https://laogao.xyz/geod-telemetry/v1'
-    : 'http://127.0.0.1:9091/geod-telemetry/v1')
+    ? 'https://laogao.xyz/platform-api/v1'
+    : 'http://127.0.0.1:9092/platform-api/v1')
 
 const tokenStorageKey = 'wechat-dialog-generator:account-token'
 const guestUsageStorageKey = 'wechat-dialog-generator:guest-export-usage'
