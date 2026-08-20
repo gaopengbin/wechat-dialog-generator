@@ -1,6 +1,6 @@
 const endpoint = import.meta.env.VITE_PRODUCT_ANALYTICS_ENDPOINT ||
   (['gaopengbin.github.io', 'chat.laogao.xyz'].includes(window.location.hostname)
-    ? 'https://laogao.xyz/geod-telemetry/v1/product-events'
+    ? 'https://laogao.xyz/platform-api/v1/product-events'
     : '')
 
 const visitorStorageKey = 'wechat-dialog-generator:analytics-visitor'

@@ -1,6 +1,6 @@
 (() => {
   if (!['chat.laogao.xyz', 'gaopengbin.github.io'].includes(location.hostname)) return
-  const endpoint = 'https://laogao.xyz/geod-telemetry/v1/product-events'
+  const endpoint = 'https://laogao.xyz/platform-api/v1/product-events'
   const visitorKey = 'wechat-dialog-generator:analytics-visitor'
   const sessionKey = 'wechat-dialog-generator:analytics-session'
   const attributionKey = 'wechat-dialog-generator:analytics-attribution'
