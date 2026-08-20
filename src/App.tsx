@@ -45,6 +45,7 @@ import {
   restoreAccount,
   type AccountSession,
 } from '@/lib/account-api';
+import { createSameTemplateUrl, readSameTemplateHash } from '@/lib/share-link';
 import type { ChatUser, ChatMessage, PhoneSettings } from '@/types';
 
 const defaultSettings: PhoneSettings = {
@@ -132,6 +133,29 @@ function App() {
         const storedProjects = await listProjects();
         if (cancelled) return;
         setProjects(storedProjects);
+
+        let sharedSnapshot: ChatProjectSnapshot | null = null;
+        try {
+          sharedSnapshot = await readSameTemplateHash(window.location.hash);
+        } catch {
+          if (!cancelled) setToast('分享模板已失效或内容格式不正确');
+        }
+        if (sharedSnapshot) {
+          setActiveTool('chat');
+          setImportText(sharedSnapshot.importText);
+          setUsers(sharedSnapshot.users);
+          setMessages(sharedSnapshot.messages);
+          setSettings(sharedSnapshot.settings);
+          setSelfId(sharedSnapshot.selfId);
+          setActiveProjectId(null);
+          setActiveProjectName(`${projectName(sharedSnapshot)} 同款`);
+          setActiveProjectCreatedAt(null);
+          setSaveState('idle');
+          dialogTracked.current = sharedSnapshot.messages.length > 0;
+          window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+          void trackProductEvent('shared_template_opened');
+          return;
+        }
 
         let storedId: string | null = null;
         try {
@@ -506,6 +530,33 @@ function App() {
     }
   }, [showToast]);
 
+  const handleShareSame = useCallback(async () => {
+    if (!messages.length) {
+      showToast('请先创建对话内容');
+      return;
+    }
+    if (!window.confirm('分享链接会包含当前对话文字和样式，不包含已上传的头像与图片。确定生成吗？')) return;
+    try {
+      const snapshot: ChatProjectSnapshot = { importText, users, messages, settings, selfId };
+      const url = await createSameTemplateUrl(snapshot, window.location.href);
+      void trackProductEvent('shared_template_created');
+      if (navigator.share) {
+        await navigator.share({
+          title: `${activeProjectName.trim() || settings.contactName || '微信对话'}同款模板`,
+          text: '打开链接即可复用这份对话排版，头像和图片需要自行重新上传。',
+          url,
+        });
+        showToast('同款模板分享面板已打开');
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      showToast('同款模板链接已复制');
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      showToast(error instanceof Error ? error.message : '生成同款链接失败');
+    }
+  }, [activeProjectName, importText, messages, selfId, settings, showToast, users]);
+
   const handleImport = useCallback(() => {
     if (!importText.trim()) {
       showToast('请先输入聊天记录文本');
@@ -759,6 +810,9 @@ function App() {
               </button>
               <button className="btn btn-outline btn-sm" onClick={handleGenerateLongImage}>
                 <ImageIcon size={15} /> 长截图
+              </button>
+              <button className="btn btn-outline btn-sm" onClick={handleShareSame}>
+                <Share2 size={15} /> 生成同款
               </button>
             </div>
           )}

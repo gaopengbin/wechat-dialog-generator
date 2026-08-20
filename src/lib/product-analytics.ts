@@ -16,6 +16,8 @@ type EventName =
   | 'project_duplicated'
   | 'official_account_prompt_viewed'
   | 'official_account_id_copied'
+  | 'shared_template_created'
+  | 'shared_template_opened'
 type Properties = Record<string, string>
 
 function identifier(storage: Storage, key: string) {
