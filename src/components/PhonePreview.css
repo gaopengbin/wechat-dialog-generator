@@ -310,6 +310,21 @@
   right: 0;
   overflow-y: scroll;
   -webkit-overflow-scrolling: touch;
+  background-color: #ededed;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+.wc-chat-body-image .wc-nick {
+  color: rgba(255, 255, 255, 0.96);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+}
+.wc-chat-body-image .wc-notice-bg {
+  padding: 8px 18px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 .wc-chat-body::-webkit-scrollbar { width: 0; display: none; }
 .wc-chat-body { scrollbar-width: none; -ms-overflow-style: none; }

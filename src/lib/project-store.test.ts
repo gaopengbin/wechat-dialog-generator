@@ -18,6 +18,8 @@ const emptySnapshot = {
     unreadCount: 1,
     selfBubbleColor: '#95ec69',
     otherBubbleColor: '#ffffff',
+    backgroundColor: '#ededed',
+    backgroundImage: null,
   },
   selfId: null,
 }

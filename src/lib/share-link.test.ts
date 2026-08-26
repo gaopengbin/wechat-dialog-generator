@@ -26,6 +26,8 @@ const snapshot: ChatProjectSnapshot = {
     unreadCount: 1,
     selfBubbleColor: '#95ec69',
     otherBubbleColor: '#ffffff',
+    backgroundColor: '#ededed',
+    backgroundImage: 'data:image/png;base64,private-background',
   },
   selfId: 1,
 }
@@ -40,6 +42,8 @@ test('round trips a same-template URL without uploaded private media', async () 
   assert.equal(restored.messages[1].type, 'text')
   assert.equal(restored.messages[1].content, '[图片位置，请重新上传图片]')
   assert.equal(restored.settings.contactName, '小林')
+  assert.equal(restored.settings.backgroundColor, '#ededed')
+  assert.equal(restored.settings.backgroundImage, null)
 })
 
 test('rejects malformed shared snapshots', () => {

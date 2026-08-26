@@ -1,4 +1,5 @@
-import { Settings } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { ImagePlus, Settings, Trash2 } from 'lucide-react';
 import type { PhoneSettings } from '@/types';
 
 interface SettingsPanelProps {
@@ -7,8 +8,32 @@ interface SettingsPanelProps {
 }
 
 export function SettingsPanel({ settings, onSettingsChange }: SettingsPanelProps) {
+  const backgroundInputRef = useRef<HTMLInputElement>(null);
+  const [backgroundError, setBackgroundError] = useState('');
+
   const update = (patch: Partial<PhoneSettings>) => {
     onSettingsChange({ ...settings, ...patch });
+  };
+
+  const handleBackgroundUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setBackgroundError('请选择图片文件');
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setBackgroundError('背景图片不能超过 8MB');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setBackgroundError('');
+      update({ backgroundImage: String(reader.result) });
+    };
+    reader.onerror = () => setBackgroundError('图片读取失败，请重新选择');
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -88,6 +113,33 @@ export function SettingsPanel({ settings, onSettingsChange }: SettingsPanelProps
               <input type="color" className="form-color" value={settings.otherBubbleColor} onChange={(e) => update({ otherBubbleColor: e.target.value })} />
               <span style={{ fontSize: 13, color: '#6b7280' }}>{settings.otherBubbleColor}</span>
             </div>
+          </div>
+          <div className="form-item form-item-wide">
+            <label className="form-label">聊天背景</label>
+            <div className="chat-background-control">
+              <div className="chat-background-color">
+                <input
+                  type="color"
+                  className="form-color"
+                  value={settings.backgroundColor || '#ededed'}
+                  aria-label="聊天背景颜色"
+                  onChange={(event) => update({ backgroundColor: event.target.value })}
+                />
+                <span>{settings.backgroundColor || '#ededed'}</span>
+              </div>
+              <button className="btn btn-outline btn-sm" type="button" onClick={() => backgroundInputRef.current?.click()}>
+                <ImagePlus size={15} /> {settings.backgroundImage ? '更换背景图' : '上传背景图'}
+              </button>
+              {settings.backgroundImage && (
+                <button className="btn btn-ghost btn-sm" type="button" onClick={() => update({ backgroundImage: null })}>
+                  <Trash2 size={15} /> 移除图片
+                </button>
+              )}
+              <input ref={backgroundInputRef} type="file" accept="image/*" hidden onChange={handleBackgroundUpload} />
+              {settings.backgroundImage && <img className="chat-background-thumb" src={settings.backgroundImage} alt="当前聊天背景预览" />}
+            </div>
+            <small className="form-help">背景仅保存在当前浏览器，截图和长截图都会保留；分享链接不会携带本地图片。</small>
+            {backgroundError && <small className="form-error" role="alert">{backgroundError}</small>}
           </div>
         </div>
       </div>

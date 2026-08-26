@@ -18,7 +18,11 @@ type EventName =
   | 'official_account_id_copied'
   | 'shared_template_created'
   | 'shared_template_opened'
+  | 'tool_selected'
+  | 'template_used'
 type Properties = Record<string, string>
+
+export type WechatTool = 'chat' | 'moments' | 'payment' | 'redpacket' | 'profile' | 'group'
 
 function identifier(storage: Storage, key: string) {
   const existing = storage.getItem(key)

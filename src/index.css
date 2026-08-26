@@ -389,6 +389,7 @@ body {
 .moments-avatar-upload input,
 .moments-add-image input { display: none; }
 .moments-content-input { min-height: 118px; }
+.moments-cover-editor { display: grid; gap: 8px; }
 .moments-label-line { display: flex; justify-content: space-between; color: #555e59; font-size: 12px; font-weight: 650; }
 .moments-label-line small { color: #a1a6a3; font-weight: 500; }
 .moments-image-editor { display: grid; grid-template-columns: repeat(5, minmax(64px, 1fr)); gap: 8px; margin-top: 8px; }
@@ -684,8 +685,9 @@ body {
 .moments-phone-real .wechat-chrome-content { background: #fff; }
 .moments-phone-real .wechat-chrome-screen { min-height: 790px; background: #fff; }
 .moments-phone-real .wechat-chrome-content { min-height: 700px; }
-.moments-cover { height: 235px; padding: 0; overflow: visible; background: linear-gradient(145deg,#243833,#75877f 48%,#c2cbc7); }
+.moments-cover { height: 235px; padding: 0; overflow: visible; background-color: #75877f; background-image: linear-gradient(145deg,#243833,#75877f 48%,#c2cbc7); background-position: center; background-repeat: no-repeat; background-size: cover; }
 .moments-cover::before { inset: 0; background: radial-gradient(circle at 73% 28%,rgba(255,255,255,.35),transparent 28%),linear-gradient(160deg,transparent 0 45%,rgba(255,255,255,.09) 45% 60%,transparent 60%); transform: none; }
+.moments-cover.has-custom-background::before { background: linear-gradient(180deg,rgba(0,0,0,.02),rgba(0,0,0,.08)); }
 .moments-cover-shade { position: absolute; inset: 0; background: linear-gradient(transparent 48%,rgba(0,0,0,.28)); }
 .moments-profile { position: absolute; z-index: 2; right: 15px; bottom: -28px; display: flex; align-items: center; gap: 12px; }
 .moments-profile > strong { color: #fff; font-size: 14px; font-weight: 550; text-shadow: 0 1px 3px rgba(0,0,0,.65); }
@@ -1040,6 +1042,7 @@ body {
   gap: 20px;
 }
 .form-item { display: flex; flex-direction: column; gap: 7px; }
+.form-item-wide { grid-column: 1 / -1; }
 .form-label {
   font-family: 'Outfit', sans-serif;
   font-size: 12px;
@@ -1107,6 +1110,22 @@ input[type="range"].form-range::-webkit-slider-thumb:hover {
 .form-color:hover { border-color: #C7C7CC; }
 .form-color::-webkit-color-swatch-wrapper { padding: 0; }
 .form-color::-webkit-color-swatch { border: none; border-radius: 6px; }
+.chat-background-control {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-height: 48px;
+  padding: 8px;
+  border: 1px solid #e5e5ea;
+  border-radius: 12px;
+  background: #fafafa;
+}
+.chat-background-color { display: flex; align-items: center; gap: 9px; color: #6b7280; font-size: 13px; }
+.chat-background-thumb { width: 44px; height: 44px; margin-left: auto; border: 1px solid #dedee3; border-radius: 9px; object-fit: cover; }
+.form-help, .form-error { font-size: 11px; line-height: 1.55; }
+.form-help { color: #8e8e93; }
+.form-error { color: #c83c31; }
 
 /* ===================== TEXTAREA ===================== */
 .s-textarea {

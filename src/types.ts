@@ -31,4 +31,6 @@ export interface PhoneSettings {
   unreadCount: number;
   selfBubbleColor: string;
   otherBubbleColor: string;
+  backgroundColor: string;
+  backgroundImage: string | null;
 }

@@ -32,6 +32,7 @@ import {
   messageCountBucket,
   participantCountBucket,
   trackProductEvent,
+  type WechatTool,
 } from '@/lib/product-analytics';
 import {
   AccountApiError,
@@ -60,6 +61,8 @@ const defaultSettings: PhoneSettings = {
   unreadCount: 1,
   selfBubbleColor: '#95ec69',
   otherBubbleColor: '#ffffff',
+  backgroundColor: '#ededed',
+  backgroundImage: null,
 };
 
 function App() {
@@ -70,11 +73,11 @@ function App() {
   const [accountBusy, setAccountBusy] = useState(false);
   const [accountError, setAccountError] = useState('');
   const [redeemMessage, setRedeemMessage] = useState('');
-  const [activeTool, setActiveTool] = useState<'chat' | 'moments' | 'payment' | 'redpacket' | 'profile' | 'group'>(() => {
+  const [activeTool, setActiveTool] = useState<WechatTool>(() => {
     try {
       const stored = localStorage.getItem('wechat-dialog-generator:active-tool');
       return ['moments', 'payment', 'redpacket', 'profile', 'group'].includes(stored ?? '')
-        ? stored as 'moments' | 'payment' | 'redpacket' | 'profile' | 'group'
+        ? stored as WechatTool
         : 'chat';
     } catch {
       return 'chat';
@@ -118,6 +121,7 @@ function App() {
     } catch {
       // Tool switching still works for the current page session.
     }
+    void trackProductEvent('tool_selected', { tool: activeTool });
   }, [activeTool]);
 
   useEffect(() => {
@@ -145,7 +149,7 @@ function App() {
           setImportText(sharedSnapshot.importText);
           setUsers(sharedSnapshot.users);
           setMessages(sharedSnapshot.messages);
-          setSettings(sharedSnapshot.settings);
+          setSettings({ ...defaultSettings, ...sharedSnapshot.settings });
           setSelfId(sharedSnapshot.selfId);
           setActiveProjectId(null);
           setActiveProjectName(`${projectName(sharedSnapshot)} 同款`);
@@ -169,7 +173,7 @@ function App() {
           setImportText(active.importText);
           setUsers(active.users);
           setMessages(active.messages);
-          setSettings(active.settings);
+          setSettings({ ...defaultSettings, ...active.settings });
           setSelfId(active.selfId);
           setActiveProjectId(active.id);
           setActiveProjectName(active.name);
@@ -461,7 +465,7 @@ function App() {
     setImportText(project.importText);
     setUsers(project.users);
     setMessages(project.messages);
-    setSettings(project.settings);
+    setSettings({ ...defaultSettings, ...project.settings });
     setSelfId(project.selfId);
     setActiveProjectId(project.id);
     setActiveProjectName(project.name);
@@ -503,8 +507,9 @@ function App() {
     }
   }, [activeProjectId, resetEditor, showToast]);
 
-  const handleUseTemplate = useCallback((content: string) => {
+  const handleUseTemplate = useCallback((content: string, templateId: string) => {
     setImportText(content);
+    void trackProductEvent('template_used', { tool: 'chat', template_id: templateId });
     editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     showToast('模板已载入，点击“解析并导入”即可预览');
   }, [showToast]);
@@ -726,6 +731,7 @@ function App() {
       void trackProductEvent('image_exported', {
         capture_mode: 'standard',
         message_count_bucket: messageCountBucket(messages.length),
+        tool: 'chat',
       });
       showToast('图片已生成并下载！');
       promptAfterExport();
@@ -748,6 +754,7 @@ function App() {
           void trackProductEvent('image_exported', {
             capture_mode: 'clipboard',
             message_count_bucket: messageCountBucket(messages.length),
+            tool: 'chat',
           });
           showToast('图片已复制到剪贴板！');
           promptAfterExport();
@@ -774,6 +781,7 @@ function App() {
       void trackProductEvent('image_exported', {
         capture_mode: 'long',
         message_count_bucket: messageCountBucket(messages.length),
+        tool: 'chat',
       });
       showToast('长截图已生成并下载！');
       promptAfterExport();
@@ -891,9 +899,15 @@ function App() {
         )}
       </main>}
 
-      {activeTool === 'moments' && <MomentsEditor onToast={showToast} onBeforeExport={authorizeExport} onExportSuccess={promptAfterExport} />}
+      {activeTool === 'moments' && <MomentsEditor onToast={showToast} onBeforeExport={authorizeExport} onExportSuccess={() => {
+        void trackProductEvent('image_exported', { capture_mode: 'standard', tool: 'moments' });
+        promptAfterExport();
+      }} />}
       {(['payment', 'redpacket', 'profile', 'group'] as const).includes(activeTool as 'payment' | 'redpacket' | 'profile' | 'group') && (
-        <WechatSceneEditor key={activeTool} kind={activeTool as 'payment' | 'redpacket' | 'profile' | 'group'} onToast={showToast} onBeforeExport={authorizeExport} onExportSuccess={promptAfterExport} />
+        <WechatSceneEditor key={activeTool} kind={activeTool as 'payment' | 'redpacket' | 'profile' | 'group'} onToast={showToast} onBeforeExport={authorizeExport} onExportSuccess={() => {
+          void trackProductEvent('image_exported', { capture_mode: 'standard', tool: activeTool });
+          promptAfterExport();
+        }} />
       )}
 
       {activeTool === 'chat' && <GrowthContent onUseTemplate={handleUseTemplate} />}

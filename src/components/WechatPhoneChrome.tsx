@@ -9,7 +9,7 @@ interface WechatPhoneChromeProps {
   rightAction?: WechatHeaderAction
 }
 
-const compactHeaderSettings: PhoneSettings = { platform: 'ios', time: '12:02', signal: 4, secondarySignal: 4, simMode: 'single', wifiEnabled: true, battery: 87, contactName: '', unreadCount: 0, selfBubbleColor: '#95ec69', otherBubbleColor: '#fff' }
+const compactHeaderSettings: PhoneSettings = { platform: 'ios', time: '12:02', signal: 4, secondarySignal: 4, simMode: 'single', wifiEnabled: true, battery: 87, contactName: '', unreadCount: 0, selfBubbleColor: '#95ec69', otherBubbleColor: '#ffffff', backgroundColor: '#ededed', backgroundImage: null }
 
 export function WechatPhoneChrome({ title = '', children, className = '', watermark = true, rightAction = 'dots' }: WechatPhoneChromeProps) {
   return (

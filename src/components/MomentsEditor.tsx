@@ -8,6 +8,8 @@ const emptyMoment: MomentProject = {
   id: 'active',
   author: '高鹏彬',
   avatar: null,
+  coverColor: '#75877f',
+  coverImage: null,
   content: '分享此刻的想法…',
   images: [],
   location: '',
@@ -40,13 +42,15 @@ export function MomentsEditor({ onToast, onBeforeExport, onExportSuccess }: Mome
   const [likeInput, setLikeInput] = useState('')
   const [commentAuthor, setCommentAuthor] = useState('小林')
   const [commentContent, setCommentContent] = useState('')
+  const [coverError, setCoverError] = useState('')
   const previewRef = useRef<HTMLDivElement | null>(null)
+  const coverInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     void loadMomentProject()
       .then(project => {
         if (project) {
-          setDraft(project)
+          setDraft({ ...emptyMoment, ...project })
           setSaved(true)
         }
       })
@@ -78,6 +82,24 @@ export function MomentsEditor({ onToast, onBeforeExport, onExportSuccess }: Mome
 
   const handleAvatar = useCallback(async (file?: File) => {
     if (file) update('avatar', await fileAsDataUrl(file))
+  }, [update])
+
+  const handleCover = useCallback(async (file?: File) => {
+    setCoverError('')
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setCoverError('请选择图片文件')
+      return
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setCoverError('背景图片不能超过 8 MB')
+      return
+    }
+    try {
+      update('coverImage', await fileAsDataUrl(file))
+    } catch {
+      setCoverError('背景图片读取失败，请重新选择')
+    }
   }, [update])
 
   const addLikes = useCallback(() => {
@@ -132,6 +154,32 @@ export function MomentsEditor({ onToast, onBeforeExport, onExportSuccess }: Mome
             </label>
             <label>昵称<input className="me-input" value={draft.author} maxLength={20} onChange={event => update('author', event.target.value)} /></label>
           </div>
+          <div className="moments-cover-editor">
+            <div className="moments-label-line"><span>朋友圈背景</span><small>封面图</small></div>
+            <div className="chat-background-control">
+              <div className="chat-background-color">
+                <input
+                  type="color"
+                  aria-label="朋友圈背景颜色"
+                  value={draft.coverColor || '#75877f'}
+                  onChange={event => update('coverColor', event.target.value)}
+                />
+                <span>{draft.coverColor || '#75877f'}</span>
+              </div>
+              <button className="btn btn-outline btn-sm" type="button" onClick={() => coverInputRef.current?.click()}>
+                <ImagePlus size={15} /> {draft.coverImage ? '更换背景图' : '上传背景图'}
+              </button>
+              {draft.coverImage && (
+                <button className="btn btn-ghost btn-sm" type="button" onClick={() => update('coverImage', null)}>
+                  <Trash2 size={15} /> 移除图片
+                </button>
+              )}
+              <input ref={coverInputRef} type="file" accept="image/*" hidden onChange={event => { void handleCover(event.target.files?.[0]); event.currentTarget.value = '' }} />
+              {draft.coverImage && <img className="chat-background-thumb" src={draft.coverImage} alt="当前朋友圈背景预览" />}
+            </div>
+            <small className="form-helper">背景仅保存在当前浏览器，导出的朋友圈图片会保留。</small>
+            {coverError && <small className="form-error" role="alert">{coverError}</small>}
+          </div>
           <label>朋友圈内容<textarea className="me-textarea moments-content-input" value={draft.content} rows={5} maxLength={500} onChange={event => update('content', event.target.value)} /></label>
           <div>
             <div className="moments-label-line"><span>图片</span><small>{draft.images.length}/9</small></div>
@@ -167,7 +215,13 @@ export function MomentsEditor({ onToast, onBeforeExport, onExportSuccess }: Mome
         <div className="moments-preview-label"><span>实时预览</span><small>模拟界面 · 仅用于创作与设计演示</small></div>
         <div ref={previewRef}>
           <WechatPhoneChrome className="moments-phone-real" title="朋友圈" rightAction="camera">
-          <div className="moments-cover"><div className="moments-cover-shade" /><div className="moments-profile"><strong>{draft.author || '未命名用户'}</strong><div>{draft.avatar ? <img src={draft.avatar} alt="" /> : draft.author.slice(0, 1) || '我'}</div></div></div>
+          <div
+            className={`moments-cover${draft.coverImage ? ' has-custom-background' : ''}`}
+            style={{
+              backgroundColor: draft.coverColor || '#75877f',
+              backgroundImage: draft.coverImage ? `url(${draft.coverImage})` : undefined,
+            }}
+          ><div className="moments-cover-shade" /><div className="moments-profile"><strong>{draft.author || '未命名用户'}</strong><div>{draft.avatar ? <img src={draft.avatar} alt="" /> : draft.author.slice(0, 1) || '我'}</div></div></div>
           <article className="moment-post">
             <div className="moment-avatar">{draft.avatar ? <img src={draft.avatar} alt="" /> : draft.author.slice(0, 1) || '我'}</div>
             <div className="moment-main">

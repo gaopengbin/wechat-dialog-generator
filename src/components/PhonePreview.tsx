@@ -167,7 +167,14 @@ export function PhonePreview({ users, messages, settings, selfId, phoneRef, onUp
             </div>
 
             {/* Chat body */}
-            <div className="wc-chat-body" ref={bodyRef}>
+            <div
+              className={`wc-chat-body${settings.backgroundImage ? ' wc-chat-body-image' : ''}`}
+              ref={bodyRef}
+              style={{
+                backgroundColor: settings.backgroundColor || '#ededed',
+                backgroundImage: settings.backgroundImage ? `url(${settings.backgroundImage})` : undefined,
+              }}
+            >
               <div className="wc-chat-content">
                 {messages.map((msg) => {
                   if (msg.type === 'time') {

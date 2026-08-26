@@ -59,6 +59,9 @@ function sanitizeSettings(value: unknown): PhoneSettings {
     unreadCount: boundedNumber(settings.unreadCount, 1, 0, 999),
     selfBubbleColor: color(settings.selfBubbleColor, '#95ec69'),
     otherBubbleColor: color(settings.otherBubbleColor, '#ffffff'),
+    backgroundColor: color(settings.backgroundColor, '#ededed'),
+    // Uploaded background images stay local, just like avatars and message images.
+    backgroundImage: null,
   }
 }
 

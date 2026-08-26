@@ -34,6 +34,8 @@ export interface MomentProject {
   id: 'active'
   author: string
   avatar: string | null
+  coverColor: string
+  coverImage: string | null
   content: string
   images: string[]
   location: string
