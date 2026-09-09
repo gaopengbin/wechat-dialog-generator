@@ -12,6 +12,7 @@ import { MomentsEditor } from '@/components/MomentsEditor';
 import { WechatSceneEditor } from '@/components/WechatSceneEditor';
 import { AccountDialog } from '@/components/AccountDialog';
 import { ShareDialog } from '@/components/ShareDialog';
+import { trackGrowthEvent } from '@/lib/growth-analytics';
 import { RewardHeaderButton, RewardPromotion } from '@/components/RewardPromotion';
 import {
   OfficialAccountDialog,
@@ -102,12 +103,16 @@ function App() {
   const phoneRef = useRef<HTMLDivElement | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const dialogTracked = useRef(false);
+  const inviteLandingTracked = useRef(false);
   const editorRef = useRef<HTMLElement | null>(null);
   const restoredProjectTracked = useRef(false);
   const skipNextSave = useRef(false);
 
   useEffect(() => {
     void trackProductEvent('page_view');
+    if (!inviteLandingTracked.current && /^[\w-]{16}$/.test(new URLSearchParams(window.location.search).get('invite') || '')) {
+      inviteLandingTracked.current = true; trackGrowthEvent('invite_landing_viewed');
+    }
     void restoreAccount().then(session => {
       if (session) {
         setAccountSession(session);
@@ -536,6 +541,7 @@ function App() {
   }, [showToast]);
 
   const handleShare = useCallback(async () => {
+    trackGrowthEvent('promotion_clicked', { placement: 'hero', offer: 'referral' });
     setShareOpen(true);
   }, []);
 

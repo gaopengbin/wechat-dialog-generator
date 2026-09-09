@@ -1,5 +1,6 @@
-const endpoint = import.meta.env.VITE_PRODUCT_ANALYTICS_ENDPOINT ||
-  (['gaopengbin.github.io', 'chat.laogao.xyz'].includes(window.location.hostname)
+import type { GrowthEvent } from './growth-analytics'
+const endpoint = import.meta.env?.VITE_PRODUCT_ANALYTICS_ENDPOINT ||
+  (typeof window !== 'undefined' && ['gaopengbin.github.io', 'chat.laogao.xyz'].includes(window.location.hostname)
     ? 'https://laogao.xyz/platform-api/v1/product-events'
     : '')
 
@@ -7,7 +8,7 @@ const visitorStorageKey = 'wechat-dialog-generator:analytics-visitor'
 const sessionStorageKey = 'wechat-dialog-generator:analytics-session'
 const attributionStorageKey = 'wechat-dialog-generator:analytics-attribution'
 
-type EventName =
+type EventName = GrowthEvent
   | 'page_view'
   | 'dialog_created'
   | 'image_exported'
@@ -95,16 +96,29 @@ export async function trackProductEvent(event: EventName, properties: Properties
         occurred_at: new Date().toISOString(),
         visitor_id: identifier(localStorage, visitorStorageKey),
         session_id: identifier(sessionStorage, sessionStorageKey),
-        properties: { ...acquisition(), ...properties },
+        properties: { ...(/^(promotion_|share_dialog_|share_action$|account_|invite_landing_)/.test(event) ? {} : acquisition()), ...properties },
       }],
     }
-    await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(payload),
-      keepalive: true,
-    })
+    await sendProductEnvelope(endpoint, payload)
   } catch {
     // Analytics must never interrupt image generation or local-only editing.
   }
+}
+
+export async function sendProductEnvelope(url: string, payload: unknown, fetcher: typeof fetch = fetch) {
+  const body = JSON.stringify(payload)
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const response = await fetcher(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body,
+      keepalive: true,
+      signal: AbortSignal.timeout(5000),
+      })
+      if (response.ok) return true
+      if (response.status < 500) return false
+    } catch { /* retry transient errors only once, keeping the same event ID */ }
+  }
+  return false
 }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import { Copy, Download, Share2, X } from 'lucide-react'
 import { createInvite, getGrowth, revokeInvite, type AccountSession, type Growth } from '@/lib/account-api'
+import { trackGrowthEvent, growthReason } from '@/lib/growth-analytics'
 
 async function renderCard(canvas: HTMLCanvasElement, url: string) {
   await document.fonts.ready
@@ -38,6 +39,8 @@ export function ShareDialog({ session, onClose, onAccount }: { session: AccountS
   const card = useRef<HTMLCanvasElement>(null)
   const panel = useRef<HTMLElement>(null)
   const linkField = useRef<HTMLInputElement>(null)
+  const trackedOpen = useRef(false)
+  useEffect(() => { if (!trackedOpen.current) { trackedOpen.current = true; trackGrowthEvent('share_dialog_viewed') } }, [])
   const base = new URL(window.location.pathname, window.location.origin)
   if (code) base.searchParams.set('invite', code)
   const url = base.toString()
@@ -87,16 +90,22 @@ export function ShareDialog({ session, onClose, onAccount }: { session: AccountS
     finally { setBusy(false) }
   }
   const copy = async () => {
-    try { await navigator.clipboard.writeText(url); setNotice('链接已复制。对方打开并满足规则后才会发奖。') }
-    catch { linkField.current?.select(); setNotice('自动复制不可用，链接已选中，请长按复制或按 Ctrl+C') }
+    trackGrowthEvent('share_action', { action: 'copy', outcome: 'started', reason: 'none' })
+    try { await navigator.clipboard.writeText(url); trackGrowthEvent('share_action', { action: 'copy', outcome: 'succeeded', reason: 'none' }); setNotice('链接已复制。对方打开并满足规则后才会发奖。') }
+    catch { trackGrowthEvent('share_action', { action: 'copy', outcome: 'failed', reason: 'unavailable' }); linkField.current?.select(); setNotice('自动复制不可用，链接已选中，请长按复制或按 Ctrl+C') }
   }
   const download = () => {
-    const link = document.createElement('a'); link.download = '微信创作工具箱-分享卡片.png'; link.href = card.current!.toDataURL('image/png'); link.click(); setNotice('已请求保存 PNG，可发送给好友；保存卡片本身不会发奖。')
+    trackGrowthEvent('share_action', { action: 'card', outcome: 'started', reason: 'none' })
+    try {
+      const link = document.createElement('a'); link.download = '微信创作工具箱-分享卡片.png'; link.href = card.current!.toDataURL('image/png'); link.click()
+      trackGrowthEvent('share_action', { action: 'card', outcome: 'download_requested', reason: 'none' }); setNotice('已请求保存 PNG，可发送给好友；保存卡片本身不会发奖。')
+    } catch { trackGrowthEvent('share_action', { action: 'card', outcome: 'failed', reason: 'unavailable' }); setNotice('保存未发起，请重试或复制链接') }
   }
   const share = async () => {
-    if (!navigator.share) return copy()
-    try { await navigator.share({ title: '微信创作工具箱', text: '打开即用，验证注册赠 20 次导出。', url }); setNotice('已完成系统分享操作，奖励以有效访问及邀请记录为准。') }
-    catch (error) { setNotice(error instanceof DOMException && error.name === 'AbortError' ? '已取消分享，未计入奖励。' : '系统分享不可用，请复制链接或保存卡片。') }
+    trackGrowthEvent('share_action', { action: 'system', outcome: 'started', reason: 'none' })
+    if (!navigator.share) { trackGrowthEvent('share_action', { action: 'system', outcome: 'unsupported', reason: 'unavailable' }); return copy() }
+    try { await navigator.share({ title: '微信创作工具箱', text: '打开即用，验证注册赠 20 次导出。', url }); trackGrowthEvent('share_action', { action: 'system', outcome: 'returned', reason: 'none' }); setNotice('已完成系统分享操作，奖励以有效访问及邀请记录为准。') }
+    catch (error) { trackGrowthEvent('share_action', { action: 'system', outcome: growthReason(error) === 'cancelled' ? 'cancelled' : 'failed', reason: growthReason(error) }); setNotice(error instanceof DOMException && error.name === 'AbortError' ? '已取消分享，未计入奖励。' : '系统分享不可用，请复制链接或保存卡片。') }
   }
   return <div className="account-overlay" onMouseDown={e => { if (e.currentTarget === e.target) onClose() }}>
     <section ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="share-title" className="account-dialog share-dialog">

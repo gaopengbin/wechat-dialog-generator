@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { LogOut, ShieldCheck, UserRound, X } from 'lucide-react'
 import { getRewards, requestEmailCode, resetAccountPassword, type AccountSession, type Reward } from '@/lib/account-api'
+import { trackGrowthEvent } from '@/lib/growth-analytics'
 
 interface AccountDialogProps {
   open: boolean
@@ -14,7 +15,7 @@ interface AccountDialogProps {
   onLogout: () => Promise<void>
 }
 
-export function AccountDialog({ open, session, busy, error, onClose, onLogin, onRegister, onVerify, onLogout }: AccountDialogProps) {
+export function AccountDialog({ open, session, busy, error, onClose: closeParent, onLogin, onRegister, onVerify, onLogout }: AccountDialogProps) {
   const [mode, setMode] = useState<'login' | 'register' | 'reset'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -30,6 +31,13 @@ export function AccountDialog({ open, session, busy, error, onClose, onLogin, on
   const locked = busy || sending
   const purpose = session ? 'bind' : mode === 'reset' ? 'reset' : 'register'
   const targetEmail = email || (session?.user.email ?? '')
+  const formMode = session ? session.user.email_verified_at ? 'account' : 'bind' : mode
+  const viewedMode = useRef('')
+  useEffect(() => {
+    if (!open) { viewedMode.current = ''; return }
+    if (viewedMode.current !== formMode) { viewedMode.current = formMode; trackGrowthEvent('account_form_viewed', { mode: formMode }) }
+  }, [open, formMode])
+  const onClose = useCallback(() => { trackGrowthEvent('account_form_closed', { mode: formMode }); closeParent() }, [closeParent, formMode])
 
   useEffect(() => {
     if (!open) return
@@ -63,7 +71,7 @@ export function AccountDialog({ open, session, busy, error, onClose, onLogin, on
   }, [open, session])
   if (!open) return null
 
-  const changeMode = (next: typeof mode) => { setMode(next); setPassword(''); setChallenge(''); setCode(''); setNotice(''); setLocalError('') }
+  const changeMode = (next: typeof mode) => { if (next !== mode) trackGrowthEvent('account_form_closed', { mode: formMode }); setMode(next); setPassword(''); setChallenge(''); setCode(''); setNotice(''); setLocalError('') }
   const sendCode = async () => {
     setSending(true); setLocalError(''); setNotice('')
     try { const result = await requestEmailCode(targetEmail, purpose); setChallenge(result.challenge_id); setCooldown(result.retry_after); setNotice(result.message) }

@@ -1,3 +1,4 @@
+import { measureGrowthRequest } from './growth-analytics'
 const apiRoot = import.meta.env.VITE_ACCOUNT_API_ENDPOINT ||
   (['gaopengbin.github.io', 'chat.laogao.xyz'].includes(window.location.hostname)
     ? 'https://laogao.xyz/platform-api/v1'
@@ -47,7 +48,16 @@ function token() {
   }
 }
 
-async function request<T>(path: string, options: RequestInit = {}) {
+function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const actions: Record<string, string> = { '/auth/register': 'register', '/auth/login': 'login', '/auth/email/verify': 'bind', '/auth/password/reset': 'reset', '/growth/invite': 'invite_create', '/growth/revoke': 'invite_revoke', '/growth/visit': 'invite_visit', '/quota/complete': 'export_complete' }
+  let action = actions[path]
+  if (path === '/auth/email-code') {
+    const purpose = JSON.parse(String(options.body || '{}')).purpose
+    if (['register', 'bind', 'reset'].includes(purpose)) action = `code_${purpose}`
+  }
+  return action ? measureGrowthRequest(action, () => rawRequest<T>(path, options)) : rawRequest<T>(path, options)
+}
+async function rawRequest<T>(path: string, options: RequestInit = {}) {
   const sessionToken = token()
   const response = await fetch(`${apiRoot}${path}`, {
     signal: AbortSignal.timeout(20000),
