@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f5fbf7"/>
+      <stop offset="1" stop-color="#e8f8ef"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07c160"/>
+      <stop offset="1" stop-color="#059b4b"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#103d25" flood-opacity=".13"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="630" rx="42" fill="url(#bg)"/>
+  <circle cx="1080" cy="80" r="220" fill="#07c160" opacity=".06"/>
+  <circle cx="1040" cy="570" r="180" fill="#07c160" opacity=".05"/>
+
+  <g transform="translate(74 72)">
+    <rect width="70" height="70" rx="22" fill="url(#accent)"/>
+    <path d="M18 25c0-8 8-14 18-14s18 6 18 14-8 14-18 14c-2 0-4 0-6-1l-8 5 2-8c-4-3-6-6-6-10Z" fill="#fff"/>
+    <circle cx="29" cy="25" r="2.2" fill="#07a853"/><circle cx="36" cy="25" r="2.2" fill="#07a853"/><circle cx="43" cy="25" r="2.2" fill="#07a853"/>
+  </g>
+
+  <g font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif">
+    <text x="74" y="210" fill="#17211b" font-size="62" font-weight="760" letter-spacing="-2">微信对话生成器</text>
+    <text x="74" y="276" fill="#08783f" font-size="34" font-weight="700">在线制作聊天截图与长截图</text>
+    <text x="74" y="340" fill="#5f6b64" font-size="25">单聊 · 群聊 · 语音 · 红包 · 转账 · 高清长截图</text>
+    <g transform="translate(74 398)">
+      <rect width="134" height="46" rx="23" fill="#fff" stroke="#cfe8d8"/>
+      <text x="67" y="30" fill="#08783f" font-size="18" font-weight="650" text-anchor="middle">无需登录</text>
+      <rect x="150" width="160" height="46" rx="23" fill="#fff" stroke="#cfe8d8"/>
+      <text x="230" y="30" fill="#08783f" font-size="18" font-weight="650" text-anchor="middle">浏览器本地处理</text>
+      <rect x="326" width="134" height="46" rx="23" fill="#fff" stroke="#cfe8d8"/>
+      <text x="393" y="30" fill="#08783f" font-size="18" font-weight="650" text-anchor="middle">免费使用</text>
+    </g>
+    <text x="74" y="530" fill="#6f7b74" font-size="21">chat.laogao.xyz</text>
+  </g>
+
+  <g transform="translate(820 58)" filter="url(#shadow)">
+    <rect width="292" height="514" rx="44" fill="#161a18"/>
+    <rect x="9" y="9" width="274" height="496" rx="36" fill="#ededed"/>
+    <rect x="107" y="20" width="78" height="18" rx="9" fill="#161a18"/>
+    <text x="146" y="74" text-anchor="middle" fill="#222" font-family="sans-serif" font-size="18" font-weight="700">小林</text>
+    <g transform="translate(28 112)">
+      <rect x="48" width="188" height="62" rx="10" fill="#95ec69"/>
+      <text x="64" y="27" fill="#162018" font-family="sans-serif" font-size="15">周末有空吗？</text>
+      <text x="64" y="49" fill="#162018" font-family="sans-serif" font-size="15">新开的展览不错</text>
+      <circle cx="251" cy="31" r="23" fill="#a9d5bd"/>
+      <rect x="16" y="92" width="194" height="46" rx="10" fill="#fff"/>
+      <text x="32" y="121" fill="#202521" font-family="sans-serif" font-size="15">有空，周六下午？</text>
+      <circle cx="0" cy="115" r="23" fill="#d4b7a8"/>
+      <rect x="86" y="170" width="150" height="52" rx="10" fill="#95ec69"/>
+      <path d="M108 187v18m8-24v30m8-18v6" stroke="#17341f" stroke-width="3" stroke-linecap="round"/>
+      <text x="138" y="202" fill="#17341f" font-family="sans-serif" font-size="15">4″</text>
+      <circle cx="251" cy="196" r="23" fill="#a9d5bd"/>
+      <rect x="40" y="254" width="196" height="98" rx="10" fill="#fa9d3b"/>
+      <circle cx="70" cy="285" r="18" fill="#fcd77d"/>
+      <text x="98" y="282" fill="#fff" font-family="sans-serif" font-size="15" font-weight="700">恭喜发财</text>
+      <text x="98" y="304" fill="#fff" font-family="sans-serif" font-size="13">大吉大利</text>
+      <line x1="40" y1="325" x2="236" y2="325" stroke="#fff" opacity=".32"/>
+      <text x="54" y="344" fill="#fff" font-family="sans-serif" font-size="11">微信红包</text>
+      <circle cx="251" cy="303" r="23" fill="#a9d5bd"/>
+    </g>
+  </g>
+</svg>
