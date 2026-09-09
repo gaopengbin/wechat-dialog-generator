@@ -11,6 +11,8 @@ import { ProjectPanel } from '@/components/ProjectPanel';
 import { MomentsEditor } from '@/components/MomentsEditor';
 import { WechatSceneEditor } from '@/components/WechatSceneEditor';
 import { AccountDialog } from '@/components/AccountDialog';
+import { ShareDialog } from '@/components/ShareDialog';
+import { RewardHeaderButton, RewardPromotion } from '@/components/RewardPromotion';
 import {
   OfficialAccountDialog,
   officialAccountId,
@@ -36,6 +38,7 @@ import {
 } from '@/lib/product-analytics';
 import {
   AccountApiError,
+  verifyAccountEmail, pendingInvite, visitInvite, completeAccountExport,
   consumeAccountExport,
   consumeGuestExport,
   guestQuota,
@@ -326,15 +329,15 @@ function App() {
     }
   }, [showToast]);
 
-  const handleRegister = useCallback(async (email: string, password: string, displayName: string) => {
+  const handleRegister = useCallback(async (email: string, password: string, displayName: string, challengeId: string, code: string) => {
     setAccountBusy(true);
     setAccountError('');
     try {
-      const session = await registerAccount(email, password, displayName);
+      const session = await registerAccount(email, password, displayName, challengeId, code);
       setAccountSession(session);
       setVisibleQuota(session.quota);
       setAccountPrompt(false);
-      showToast('账户创建成功，已登录');
+      showToast('邮箱已验证，20 次奖励已到账');
     } catch (error) {
       setAccountError(error instanceof Error ? error.message : '注册失败，请稍后重试');
     } finally {
@@ -355,12 +358,30 @@ function App() {
     }
   }, [showToast]);
 
+  const [shareOpen, setShareOpen] = useState(false);
+  const closeAccount = useCallback(() => setAccountPrompt(false), []);
+  const closeShare = useCallback(() => setShareOpen(false), []);
+  useEffect(() => {
+    const code = pendingInvite();
+    if (code && accountSession?.user.email_verified_at) void visitInvite(code).catch(() => {});
+  }, [accountSession?.user.email_verified_at]);
+  const handleVerify = useCallback(async (email: string, challengeId: string, code: string) => {
+    setAccountBusy(true); setAccountError('');
+    try { const result = await verifyAccountEmail(email, challengeId, code); setAccountSession(result); setVisibleQuota(result.quota); showToast(`验证成功，${result.granted} 次奖励已到账`); }
+    catch (error) { setAccountError(error instanceof Error ? error.message : '验证失败'); }
+    finally { setAccountBusy(false); }
+  }, [showToast]);
+  const completeExport = useCallback((ticket: string | boolean | undefined) => {
+    if (typeof ticket === 'string') void completeAccountExport(ticket).catch(() => showToast('图片已生成，但奖励确认失败；请稍后再次导出以重试邀请结算'));
+  }, [showToast]);
+
   const authorizeExport = useCallback(async () => {
     try {
-      const quota = accountSession ? await consumeAccountExport() : consumeGuestExport();
+      const reservation = accountSession ? await consumeAccountExport() : null;
+      const quota = reservation ? reservation.quota : consumeGuestExport();
       setVisibleQuota(quota);
       if (accountSession) setAccountSession(current => current ? { ...current, quota } : current);
-      return true;
+      return reservation?.action_id || true;
     } catch (error) {
       const message = error instanceof Error ? error.message : '暂时无法确认导出额度';
       showToast(message);
@@ -515,25 +536,8 @@ function App() {
   }, [showToast]);
 
   const handleShare = useCallback(async () => {
-    const shareData = {
-      title: '微信对话生成器',
-      text: '在线制作微信聊天截图与长截图，无需登录即可使用，每日免费导出 10 次，内容仅在浏览器本地处理。',
-      url: 'https://chat.laogao.xyz/',
-    };
-
-    try {
-      if (navigator.share) {
-        await navigator.share(shareData);
-        showToast('分享面板已打开');
-        return;
-      }
-      await navigator.clipboard.writeText(shareData.url);
-      showToast('链接已复制，可以分享给朋友了');
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return;
-      showToast('分享失败，请稍后再试');
-    }
-  }, [showToast]);
+    setShareOpen(true);
+  }, []);
 
   const handleShareSame = useCallback(async () => {
     if (!messages.length) {
@@ -723,11 +727,13 @@ function App() {
     try {
       const canvas = await capturePhone(false);
       if (!canvas) return;
-      if (!(await authorizeExport())) return;
+      const ticket = await authorizeExport();
+      if (!ticket) return;
       const link = document.createElement('a');
       link.download = '微信聊天记录_' + Date.now() + '.png';
       link.href = canvas.toDataURL('image/png');
       link.click();
+      completeExport(ticket);
       void trackProductEvent('image_exported', {
         capture_mode: 'standard',
         message_count_bucket: messageCountBucket(messages.length),
@@ -738,7 +744,7 @@ function App() {
     } catch (e: unknown) {
       showToast('生成失败：' + (e instanceof Error ? e.message : String(e)));
     }
-  }, [showToast, capturePhone, messages.length, promptAfterExport, authorizeExport]);
+  }, [showToast, capturePhone, messages.length, promptAfterExport, authorizeExport, completeExport]);
 
   const handleCopyImage = useCallback(async () => {
     if (!phoneRef.current) return;
@@ -749,8 +755,10 @@ function App() {
       canvas.toBlob(async (blob) => {
         if (!blob) return;
         try {
-          if (!(await authorizeExport())) return;
+          const ticket = await authorizeExport();
+          if (!ticket) return;
           await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+          completeExport(ticket);
           void trackProductEvent('image_exported', {
             capture_mode: 'clipboard',
             message_count_bucket: messageCountBucket(messages.length),
@@ -765,7 +773,7 @@ function App() {
     } catch {
       showToast('操作失败');
     }
-  }, [showToast, capturePhone, messages.length, promptAfterExport, authorizeExport]);
+  }, [showToast, capturePhone, messages.length, promptAfterExport, authorizeExport, completeExport]);
 
   const handleGenerateLongImage = useCallback(async () => {
     if (!phoneRef.current) return;
@@ -773,11 +781,13 @@ function App() {
     try {
       const canvas = await capturePhone(true);
       if (!canvas) return;
-      if (!(await authorizeExport())) return;
+      const ticket = await authorizeExport();
+      if (!ticket) return;
       const link = document.createElement('a');
       link.download = '微信聊天记录_长截图_' + Date.now() + '.png';
       link.href = canvas.toDataURL('image/png');
       link.click();
+      completeExport(ticket);
       void trackProductEvent('image_exported', {
         capture_mode: 'long',
         message_count_bucket: messageCountBucket(messages.length),
@@ -788,7 +798,7 @@ function App() {
     } catch (e: unknown) {
       showToast('生成失败：' + (e instanceof Error ? e.message : String(e)));
     }
-  }, [showToast, capturePhone, messages.length, promptAfterExport, authorizeExport]);
+  }, [showToast, capturePhone, messages.length, promptAfterExport, authorizeExport, completeExport]);
 
   const hasMessages = messages.length > 0;
 
@@ -827,6 +837,7 @@ function App() {
           <button className="official-account-trigger" type="button" aria-label="关注公众号" onClick={() => openOfficialAccountPrompt('header')}>
             <BellRing size={15} /><span>关注公众号</span>
           </button>
+          <RewardHeaderButton onClick={() => setShareOpen(true)} />
           <button className="account-trigger" type="button" aria-label={`账户：${accountSession?.user.display_name ?? '未登录'}，剩余 ${visibleQuota.total_remaining} 次`} onClick={() => { setAccountError(''); setAccountPrompt(true) }}>
             <UserRound size={15} />
             <span>{accountSession ? accountSession.user.display_name : '登录'}</span>
@@ -834,6 +845,8 @@ function App() {
           </button>
         </div>
       </header>
+
+      <RewardPromotion session={accountSession} refreshKey={`${accountPrompt}:${shareOpen}`} onShare={() => setShareOpen(true)} onAccount={() => { setAccountError(''); setAccountPrompt(true); }} />
 
       <nav className="wechat-tool-dock" aria-label="微信创作工具箱">
         <button className={activeTool === 'chat' ? 'is-active' : ''} type="button" onClick={() => setActiveTool('chat')}>
@@ -899,12 +912,14 @@ function App() {
         )}
       </main>}
 
-      {activeTool === 'moments' && <MomentsEditor onToast={showToast} onBeforeExport={authorizeExport} onExportSuccess={() => {
+      {activeTool === 'moments' && <MomentsEditor onToast={showToast} onBeforeExport={authorizeExport} onExportSuccess={ticket => {
+        completeExport(ticket);
         void trackProductEvent('image_exported', { capture_mode: 'standard', tool: 'moments' });
         promptAfterExport();
       }} />}
       {(['payment', 'redpacket', 'profile', 'group'] as const).includes(activeTool as 'payment' | 'redpacket' | 'profile' | 'group') && (
-        <WechatSceneEditor key={activeTool} kind={activeTool as 'payment' | 'redpacket' | 'profile' | 'group'} onToast={showToast} onBeforeExport={authorizeExport} onExportSuccess={() => {
+        <WechatSceneEditor key={activeTool} kind={activeTool as 'payment' | 'redpacket' | 'profile' | 'group'} onToast={showToast} onBeforeExport={authorizeExport} onExportSuccess={ticket => {
+          completeExport(ticket);
           void trackProductEvent('image_exported', { capture_mode: 'standard', tool: activeTool });
           promptAfterExport();
         }} />
@@ -913,7 +928,7 @@ function App() {
       {activeTool === 'chat' && <GrowthContent onUseTemplate={handleUseTemplate} />}
 
       <footer className="analytics-note">
-        聊天内容、头像和生成图片始终在本地处理；站点仅记录匿名访问、创建和导出事件。
+        创作内容和图片在本地处理；主动分享同款时，对话文字会写入分享链接。账号服务保存邮箱、验证码验证记录及额度 / 邀请记录，访问统计使用匿名标识。
       </footer>
 
       {toast && <div className="toast-msg">{toast}</div>}
@@ -929,15 +944,18 @@ function App() {
         onRedeem={handleRedeem}
       />
       <AccountDialog
+        key={accountSession?.user.id || 'guest'}
         open={accountPrompt}
         session={accountSession}
         busy={accountBusy}
         error={accountError}
-        onClose={() => setAccountPrompt(false)}
+        onClose={closeAccount}
         onLogin={handleLogin}
         onRegister={handleRegister}
+        onVerify={handleVerify}
         onLogout={handleLogout}
       />
+      {shareOpen && <ShareDialog session={accountSession} onClose={closeShare} onAccount={() => { setShareOpen(false); setAccountError(''); setAccountPrompt(true); }} />}
     </>
   );
 }

@@ -11,6 +11,7 @@ export interface AccountUser {
   email: string
   display_name: string
   created_at: string
+  email_verified_at: string | null
 }
 
 export interface ExportQuota {
@@ -49,6 +50,7 @@ function token() {
 async function request<T>(path: string, options: RequestInit = {}) {
   const sessionToken = token()
   const response = await fetch(`${apiRoot}${path}`, {
+    signal: AbortSignal.timeout(20000),
     ...options,
     headers: {
       ...(options.body ? { 'content-type': 'application/json' } : {}),
@@ -73,10 +75,10 @@ function saveToken(value: string) {
   localStorage.setItem(tokenStorageKey, value)
 }
 
-export async function registerAccount(email: string, password: string, displayName: string) {
+export async function registerAccount(email: string, password: string, displayName: string, challenge_id: string, code: string) {
   const result = await request<AccountSession & { token: string }>('/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ email, password, display_name: displayName }),
+    body: JSON.stringify({ email, password, display_name: displayName, challenge_id, code, invite_code: pendingInvite() }),
   })
   saveToken(result.token)
   return { user: result.user, quota: result.quota }
@@ -113,11 +115,33 @@ export async function logoutAccount() {
 }
 
 export async function consumeAccountExport() {
+  const action_id = crypto.randomUUID()
   const result = await request<{ consumed: boolean; source: string; quota: ExportQuota }>('/quota/consume', {
     method: 'POST',
-    body: JSON.stringify({ action_id: crypto.randomUUID() }),
+    body: JSON.stringify({ action_id }),
   })
-  return result.quota
+  return { quota: result.quota, action_id }
+}
+
+const post = <T>(path: string, body: object) => request<T>(path, { method: 'POST', body: JSON.stringify(body) })
+export const requestEmailCode = (email: string, purpose: 'register' | 'bind' | 'reset') => post<{ challenge_id: string; retry_after: number; message: string }>('/auth/email-code', { email, purpose })
+export const verifyAccountEmail = (email: string, challenge_id: string, code: string) => post<AccountSession & { granted: number }>('/auth/email/verify', { email, challenge_id, code })
+export const resetAccountPassword = (email: string, password: string, challenge_id: string, code: string) => post<{ ok: boolean }>('/auth/password/reset', { email, password, challenge_id, code })
+export type Reward = { kind: string; amount: number; created_at: string }
+export const getRewards = () => request<{ rewards: Reward[] }>('/rewards')
+export type Growth = { links: { code: string; created_at: string; revoked_at: string | null }[]; invited: number; rewarded: number }
+export const getGrowth = () => request<Growth>('/growth')
+export const createInvite = () => post<{ code: string }>('/growth/invite', {})
+export const revokeInvite = (code: string) => post('/growth/revoke', { code })
+export const visitInvite = (code: string) => post('/growth/visit', { code })
+export const completeAccountExport = (action_id: string) => post('/quota/complete', { action_id })
+export function pendingInvite() {
+  try {
+    const code = new URL(window.location.href).searchParams.get('invite')
+    if (code && /^[\w-]{16}$/.test(code)) sessionStorage.setItem('toolbox:invite', JSON.stringify({ code, at: Date.now() }))
+    const stored = JSON.parse(sessionStorage.getItem('toolbox:invite') || 'null') as { code: string; at: number } | null
+    return stored && Date.now() - stored.at < 7 * 86400000 ? stored.code : ''
+  } catch { return '' }
 }
 
 export async function redeemFollowBonus(code: string) {

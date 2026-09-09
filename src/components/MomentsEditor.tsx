@@ -22,8 +22,8 @@ const emptyMoment: MomentProject = {
 
 interface MomentsEditorProps {
   onToast: (message: string) => void
-  onBeforeExport?: () => Promise<boolean>
-  onExportSuccess?: () => void
+  onBeforeExport?: () => Promise<boolean | string>
+  onExportSuccess?: (ticket?: boolean | string) => void
 }
 
 function fileAsDataUrl(file: File) {
@@ -127,13 +127,14 @@ export function MomentsEditor({ onToast, onBeforeExport, onExportSuccess }: Mome
         pixelRatio: 2,
         backgroundColor: '#ffffff',
       })
-      if (onBeforeExport && !(await onBeforeExport())) return
+      const ticket = onBeforeExport ? await onBeforeExport() : true
+      if (!ticket) return
       const link = document.createElement('a')
       link.download = `微信朋友圈_${Date.now()}.png`
       link.href = canvas.toDataURL('image/png')
       link.click()
       onToast('朋友圈图片已下载')
-      onExportSuccess?.()
+      onExportSuccess?.(ticket)
     } catch {
       onToast('朋友圈图片生成失败')
     }

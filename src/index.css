@@ -114,6 +114,67 @@ body {
   align-items: flex-start;
 }
 
+/* Rewards are the one high-contrast campaign surface; the editor stays green. */
+.reward-header-button { flex-shrink: 0; box-shadow: 0 3px 8px #9a34121a; }
+.reward-header-button small { font-size: 11px; padding: 3px 6px; border-radius: 5px; color: #fff; background: #ffffff1f; }
+.reward-header-button:focus-visible,
+.reward-claim-button:focus-visible,
+.reward-invite-ticket:focus-visible { outline: 3px solid #713008 !important; outline-offset: 3px; }
+.reward-promotion {
+  max-width: 1360px;
+  margin: 20px auto 0;
+  width: calc(100% - 80px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(280px, 340px);
+  align-items: center;
+  gap: 24px;
+  padding: 18px 24px;
+  border: 1px solid #eeba3d;
+  border-radius: 16px;
+  background: #ffda75;
+  color: #682909;
+}
+.reward-promotion-copy { min-width: 0; }
+.reward-promotion-badge { display: inline-flex; align-items: center; gap: 5px; color: #823009; font-size: 11px; font-weight: 700; line-height: 1.5; }
+.reward-promotion-badge.is-claimable { padding: 3px 8px; border-radius: 5px; color: #fff; background: #c2410c; }
+.reward-promotion-copy h2 { margin-top: 3px; font-size: 21px; line-height: 1.4; font-weight: 750; letter-spacing: -.5px; }
+.reward-promotion-copy p { margin-top: 4px; font-size: 12px; line-height: 1.65; color: #763e19; }
+.reward-claim-button { justify-self: start; box-shadow: 0 3px 0 #95330b; }
+.reward-invite-ticket { position: relative; isolation: isolate; display: flex; align-items: center; gap: 12px; min-width: 0; padding: 18px 16px; border: 1px solid #e9b948; border-radius: 11px; background: #fffaf0; color: #77320e; font-family: inherit; text-align: left; cursor: pointer; transition: box-shadow .15s ease; }
+.reward-invite-ticket:hover { box-shadow: 0 4px 12px #7130081a; }
+.reward-ticket-icon { display: flex; flex-shrink: 0; color: #c2410c; }
+.reward-ticket-copy { display: flex; flex-direction: column; gap: 4px; }
+.reward-ticket-copy b { font-size: 13px; font-weight: 700; }
+.reward-ticket-copy small { font-size: 11px; color: #845236; }
+.reward-ticket-value { display: flex; flex-shrink: 0; flex-direction: column; align-items: center; margin-left: auto; padding-left: 14px; border-left: 1px dashed #d7b281; }
+.reward-ticket-value strong { color: #b83d0a; font-size: 29px; line-height: 1.1; font-weight: 800; letter-spacing: -1px; }
+.reward-ticket-value small { font-size: 10px; margin-top: 3px; }
+.reward-ticket-watermark { position: absolute; right: 3px; bottom: 0; z-index: -1; color: #b83d0a; opacity: .045; pointer-events: none; }
+@media (max-width: 1200px) {
+  .reward-promotion { grid-template-columns: minmax(0, 1fr) auto; gap: 16px; }
+  .reward-invite-ticket { grid-column: 1 / -1; padding: 12px 16px; }
+  .reward-ticket-copy { flex-direction: row; align-items: center; gap: 12px; }
+  .reward-ticket-value { flex-direction: row; gap: 7px; }
+  .reward-ticket-value strong { font-size: 24px; }
+}
+@media (max-width: 1024px) {
+  .reward-promotion { width: calc(100% - 40px); }
+}
+@media (max-width: 640px) {
+  .app-header-right { gap: 6px; }
+  .reward-header-button small { display: none; }
+  .reward-header-button span { font-size: 12px; }
+  .reward-promotion { width: calc(100% - 24px); margin-top: 12px; padding: 16px; gap: 13px; grid-template-columns: minmax(0, 1fr); border-radius: 13px; }
+  .reward-promotion-copy h2 { font-size: 20px; }
+  .reward-claim-button { width: 100%; }
+  .reward-invite-ticket { padding: 12px; gap: 9px; }
+  .reward-ticket-copy { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .reward-ticket-value { padding-left: 10px; flex-direction: column; gap: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reward-header-button, .reward-claim-button, .reward-invite-ticket { transition: none !important; }
+}
+
 /* ===================== OFFICIAL ACCOUNT ===================== */
 .official-account-overlay {
   position: fixed;
@@ -270,6 +331,8 @@ body {
   animation: official-account-fade .2s ease both;
 }
 .account-dialog {
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
   position: relative;
   width: min(100%, 430px);
   padding: 32px;
@@ -303,6 +366,32 @@ body {
 .account-quota-grid strong { display: inline-block; margin-top: 6px; color: #087a41; font-size: 27px; }
 .account-quota-grid small { margin-left: 3px; color: #87908b; font-size: 10px; }
 .account-security { display: flex; align-items: center; gap: 6px; margin-top: 15px; color: #728078; font-size: 10px; }
+.account-code-row { display: flex; gap: 8px; min-width: 0; }
+.account-code-row input { min-width: 0; flex: 1; }
+.account-code-row button,.share-actions button { border: 1px solid #dce2de; border-radius: 10px; background: #f5faf7; color: #07683a; padding: 10px; font: inherit; cursor: pointer; white-space: nowrap; }
+.account-notice { color: #176b43; font-size: 12px; line-height: 1.6; }
+.account-notice:empty { display: none; }
+.account-text-button { padding: 10px 0; border: 0; background: transparent; color: #087a41; font: inherit; font-size: 12px; cursor: pointer; }
+.account-rewards { margin-top: 18px; font-size: 12px; }
+.account-rewards summary { cursor: pointer; padding: 10px 0; }
+.account-rewards > div { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid #edf1ee; }
+.account-rewards small { display: block; color: #65726b; margin-top: 3px; }
+.account-rewards strong { color: #087a41; }
+.account-dialog button:focus-visible,.account-dialog summary:focus-visible { outline: 2px solid #087a41; outline-offset: 3px; }
+.account-dialog button:disabled { opacity: .5; cursor: not-allowed; }
+.share-dialog { width: min(100%, 850px); }
+.share-dialog .account-primary-button { padding: 0 16px; }
+.share-layout { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1fr); gap: 28px; margin-top: 24px; }
+.share-card-wrap canvas { display: block; width: 100%; border: 1px solid #e0e9e2; border-radius: 8px; }
+.share-link-label { display: grid; gap: 6px; margin-top: 18px; color: #59695e; font-size: 12px; }
+.share-link-label input { width: 100%; min-width: 0; border: 1px solid #dce2de; padding: 10px; border-radius: 8px; font: inherit; }
+.share-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.share-actions button { display: inline-flex; gap: 5px; align-items: center; font-size: 12px; }
+.share-rules { margin-top: 16px; padding-top: 16px; border-top: 1px solid #e3eae5; font-size: 12px; color: #53615a; line-height: 1.7; }
+.share-rules h3 { color: #23392c; font-size: 14px; margin-bottom: 8px; }
+.share-rules p + p { margin-top: 8px; }
+@media(max-width: 640px) { .share-layout { grid-template-columns: 1fr; gap: 16px; } .share-card-wrap { max-width: 260px; margin: auto; } }
+@media(prefers-reduced-motion: reduce) { .account-overlay,.account-dialog { animation: none; } }
 #editor, #templates, #guide, #faq { scroll-margin-top: 84px; }
 
 /* ===================== WECHAT TOOLBOX ===================== */

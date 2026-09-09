@@ -72,8 +72,8 @@ const sceneDefinitions: Record<WechatSceneKind, {
 interface WechatSceneEditorProps {
   kind: WechatSceneKind
   onToast: (message: string) => void
-  onBeforeExport?: () => Promise<boolean>
-  onExportSuccess?: () => void
+  onBeforeExport?: () => Promise<boolean | string>
+  onExportSuccess?: (ticket?: boolean | string) => void
 }
 
 export function WechatSceneEditor({ kind, onToast, onBeforeExport, onExportSuccess }: WechatSceneEditorProps) {
@@ -119,13 +119,14 @@ export function WechatSceneEditor({ kind, onToast, onBeforeExport, onExportSucce
     onToast('正在生成模拟页面…')
     try {
       const canvas = await toCanvas(previewRef.current, { pixelRatio: 2, backgroundColor: '#f5f5f5' })
-      if (onBeforeExport && !(await onBeforeExport())) return
+      const ticket = onBeforeExport ? await onBeforeExport() : true
+      if (!ticket) return
       const link = document.createElement('a')
       link.download = `微信${definition.title}_${Date.now()}.png`
       link.href = canvas.toDataURL('image/png')
       link.click()
       onToast('图片已下载')
-      onExportSuccess?.()
+      onExportSuccess?.(ticket)
     } catch {
       onToast('图片生成失败')
     }
