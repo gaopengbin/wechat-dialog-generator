@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { gzipSync } from 'node:zlib'
 
 import { createSameTemplateUrl, readSameTemplateHash, sanitizeSharedSnapshot } from './share-link'
 import type { ChatProjectSnapshot } from './project-store'
@@ -52,4 +53,21 @@ test('rejects malformed shared snapshots', () => {
 
 test('ignores unrelated hash routes', async () => {
   assert.equal(await readSameTemplateHash('#editor'), null)
+})
+
+test('same-template links do not propagate another invitation or query credentials', async () => {
+  const url = await createSameTemplateUrl(snapshot, 'https://chat.laogao.xyz/?invite=other-person&token=private')
+  assert.equal(new URL(url).search, '')
+  assert.ok(await readSameTemplateHash(new URL(url).hash))
+})
+
+test('rejects compressed expansion beyond the byte budget and oversized URL before decoding', async () => {
+  const compressed = gzipSync('x'.repeat(2_000_000)).toString('base64url')
+  await assert.rejects(readSameTemplateHash(`#same=g1.${compressed}`), /内容过大/)
+  await assert.rejects(readSameTemplateHash(`#same=g1.${'A'.repeat(60001)}`), /链接过长/)
+})
+
+test('refuses creating a template that its receiver cannot load', async () => {
+  const large = { ...snapshot, messages: Array.from({ length: 250 }, (_, id) => ({ id, senderId: 1, type: 'text' as const, content: '长'.repeat(5000), params: {} })) }
+  await assert.rejects(createSameTemplateUrl(large, 'https://chat.laogao.xyz'), /内容过大/)
 })

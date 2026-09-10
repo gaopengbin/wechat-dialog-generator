@@ -1,29 +1,23 @@
+import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/controls'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toCanvas } from 'html-to-image'
-import { Camera, Download, Heart, ImagePlus, MapPin, MessageCircle, Plus, Trash2 } from 'lucide-react'
+import { Camera, Download, Heart, ImagePlus, MapPin, MessageCircle, Plus, Trash2, X } from 'lucide-react'
 import { loadMomentProject, saveMomentProject, type MomentProject } from '@/lib/project-store'
+import { DEFAULT_MOMENT as emptyMoment, refreshUntouchedMomentDemo } from '@/lib/demo-defaults'
 import { WechatPhoneChrome } from '@/components/WechatPhoneChrome'
-
-const emptyMoment: MomentProject = {
-  id: 'active',
-  author: '高鹏彬',
-  avatar: null,
-  coverColor: '#75877f',
-  coverImage: null,
-  content: '分享此刻的想法…',
-  images: [],
-  location: '',
-  timeLabel: '刚刚',
-  likes: [],
-  comments: [],
-  updatedAt: new Date(0).toISOString(),
-  version: 1,
-}
+import { WorkspacePanels } from './WorkspacePanels'
+import { beginExportLog } from '@/lib/export-log'
+import { ScenePreviewFrame } from './ScenePreviewFrame'
+import { ColorField } from './ui/color-field'
+import { Input } from './ui/input'
+import { Textarea } from './ui/textarea'
+import { Button } from './ui/button'
+import './SceneWorkspace.css'
 
 interface MomentsEditorProps {
   onToast: (message: string) => void
-  onBeforeExport?: () => Promise<boolean>
-  onExportSuccess?: () => void
+  onBeforeExport?: () => Promise<boolean | string>
+  onExportSuccess?: (ticket?: boolean | string) => void
 }
 
 function fileAsDataUrl(file: File) {
@@ -50,8 +44,9 @@ export function MomentsEditor({ onToast, onBeforeExport, onExportSuccess }: Mome
     void loadMomentProject()
       .then(project => {
         if (project) {
-          setDraft({ ...emptyMoment, ...project })
-          setSaved(true)
+          const restored = refreshUntouchedMomentDemo(project)
+          setDraft({ ...emptyMoment, ...restored })
+          setSaved(restored === project)
         }
       })
       .finally(() => setReady(true))
@@ -121,99 +116,36 @@ export function MomentsEditor({ onToast, onBeforeExport, onExportSuccess }: Mome
 
   const exportImage = useCallback(async () => {
     if (!previewRef.current) return
+    const filename = `微信朋友圈_${Date.now()}.png`
+    const log = beginExportLog({ tool: 'moments', mode: 'standard', filename })
     onToast('正在生成朋友圈图片…')
     try {
       const canvas = await toCanvas(previewRef.current, {
         pixelRatio: 2,
         backgroundColor: '#ffffff',
       })
-      if (onBeforeExport && !(await onBeforeExport())) return
+      const ticket = onBeforeExport ? await onBeforeExport() : true
+      if (!ticket) { void log.finish('cancelled', '额度校验未通过'); return }
       const link = document.createElement('a')
-      link.download = `微信朋友圈_${Date.now()}.png`
+      link.download = filename
       link.href = canvas.toDataURL('image/png')
       link.click()
+      void log.finish('download_requested')
       onToast('朋友圈图片已下载')
-      onExportSuccess?.()
+      onExportSuccess?.(ticket)
     } catch {
+      void log.finish('failed', '朋友圈图片生成或下载失败')
       onToast('朋友圈图片生成失败')
     }
   }, [onBeforeExport, onExportSuccess, onToast])
 
   return (
-    <main className="moments-workbench" id="moments-editor">
-      <section className="moments-controls s-card">
-        <div className="s-card-header moments-card-heading">
-          <h2><Camera size={18} /> 编辑朋友圈</h2>
-          <span className="s-card-badge">{saved ? '已自动保存' : '本地草稿'}</span>
-        </div>
-        <div className="s-card-body moments-form">
-          <div className="moments-form-row moments-author-row">
-            <label className="moments-avatar-upload">
-              {draft.avatar ? <img src={draft.avatar} alt="头像" /> : <span>{draft.author.slice(0, 1) || '我'}</span>}
-              <input type="file" accept="image/*" onChange={event => { void handleAvatar(event.target.files?.[0]) }} />
-            </label>
-            <label>昵称<input className="me-input" value={draft.author} maxLength={20} onChange={event => update('author', event.target.value)} /></label>
-          </div>
-          <div className="moments-cover-editor">
-            <div className="moments-label-line"><span>朋友圈背景</span><small>封面图</small></div>
-            <div className="chat-background-control">
-              <div className="chat-background-color">
-                <input
-                  type="color"
-                  aria-label="朋友圈背景颜色"
-                  value={draft.coverColor || '#75877f'}
-                  onChange={event => update('coverColor', event.target.value)}
-                />
-                <span>{draft.coverColor || '#75877f'}</span>
-              </div>
-              <button className="btn btn-outline btn-sm" type="button" onClick={() => coverInputRef.current?.click()}>
-                <ImagePlus size={15} /> {draft.coverImage ? '更换背景图' : '上传背景图'}
-              </button>
-              {draft.coverImage && (
-                <button className="btn btn-ghost btn-sm" type="button" onClick={() => update('coverImage', null)}>
-                  <Trash2 size={15} /> 移除图片
-                </button>
-              )}
-              <input ref={coverInputRef} type="file" accept="image/*" hidden onChange={event => { void handleCover(event.target.files?.[0]); event.currentTarget.value = '' }} />
-              {draft.coverImage && <img className="chat-background-thumb" src={draft.coverImage} alt="当前朋友圈背景预览" />}
-            </div>
-            <small className="form-helper">背景仅保存在当前浏览器，导出的朋友圈图片会保留。</small>
-            {coverError && <small className="form-error" role="alert">{coverError}</small>}
-          </div>
-          <label>朋友圈内容<textarea className="me-textarea moments-content-input" value={draft.content} rows={5} maxLength={500} onChange={event => update('content', event.target.value)} /></label>
-          <div>
-            <div className="moments-label-line"><span>图片</span><small>{draft.images.length}/9</small></div>
-            <div className="moments-image-editor">
-              {draft.images.map((image, index) => (
-                <div className="moments-edit-image" key={`${image.slice(-24)}-${index}`}>
-                  <img src={image} alt={`朋友圈图片 ${index + 1}`} />
-                  <button type="button" aria-label={`删除第 ${index + 1} 张图片`} onClick={() => update('images', draft.images.filter((_, itemIndex) => itemIndex !== index))}><Trash2 size={13} /></button>
-                </div>
-              ))}
-              {draft.images.length < 9 && <label className="moments-add-image"><ImagePlus size={20} /><span>添加图片</span><input type="file" accept="image/*" multiple onChange={event => { void handleImages(event.target.files) }} /></label>}
-            </div>
-          </div>
-          <div className="moments-form-grid">
-            <label>发布时间<input className="me-input" value={draft.timeLabel} maxLength={20} onChange={event => update('timeLabel', event.target.value)} /></label>
-            <label>所在位置<input className="me-input" value={draft.location} maxLength={30} placeholder="可选" onChange={event => update('location', event.target.value)} /></label>
-          </div>
-          <div className="moments-inline-editor">
-            <label>点赞用户<input className="me-input" value={likeInput} placeholder="多个昵称用逗号分隔" onChange={event => setLikeInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') addLikes() }} /></label>
-            <button className="btn btn-outline" type="button" onClick={addLikes}><Plus size={14} /> 添加</button>
-          </div>
-          {draft.likes.length > 0 && <div className="moments-chip-list">{draft.likes.map(name => <button key={name} type="button" onClick={() => update('likes', draft.likes.filter(item => item !== name))}>{name} ×</button>)}</div>}
-          <div className="moments-comment-editor">
-            <label>评论人<input className="me-input" value={commentAuthor} onChange={event => setCommentAuthor(event.target.value)} /></label>
-            <label>评论内容<input className="me-input" value={commentContent} onChange={event => setCommentContent(event.target.value)} /></label>
-            <button className="btn btn-outline" type="button" onClick={addComment}><Plus size={14} /> 添加评论</button>
-          </div>
-          <button className="btn btn-primary moments-export-button" type="button" onClick={() => { void exportImage() }}><Download size={16} /> 导出朋友圈图片</button>
-        </div>
-      </section>
-
-      <section className="moments-preview-column">
-        <div className="moments-preview-label"><span>实时预览</span><small>模拟界面 · 仅用于创作与设计演示</small></div>
-        <div ref={previewRef}>
+    <WorkspacePanels
+      previewTitle="朋友圈预览"
+      previewDescription="修改内容后即时更新，导出保留模拟标识"
+      previewActions={<Button className="btn btn-primary moments-export-button" type="button" onClick={() => { void exportImage() }}><Download size={16} /> 导出朋友圈图片</Button>}
+      preview={
+        <ScenePreviewFrame captureRef={previewRef}>
           <WechatPhoneChrome className="moments-phone-real" title="朋友圈" rightAction="camera">
           <div
             className={`moments-cover${draft.coverImage ? ' has-custom-background' : ''}`}
@@ -238,8 +170,92 @@ export function MomentsEditor({ onToast, onBeforeExport, onExportSuccess }: Mome
             </div>
           </article>
           </WechatPhoneChrome>
-        </div>
-      </section>
-    </main>
+        </ScenePreviewFrame>
+      }
+    >
+      <div className="scene-workspace-form" id="moments-editor">
+        <header className="scene-workspace-heading">
+          <div><h2><Camera size={17} /> 编辑朋友圈</h2></div>
+          <span className="scene-workspace-save-state" role="status">{saved ? '已自动保存' : '本地草稿'}</span>
+        </header>
+        <Tabs className="moments-sections" defaultValue="content">
+        <TabsList className="moments-workspace-tabs" aria-label="朋友圈编辑面板"><TabsTrigger value="content">动态内容</TabsTrigger><TabsTrigger value="identity">发布身份</TabsTrigger><TabsTrigger value="social">点赞与评论</TabsTrigger></TabsList>
+        <TabsContent className="scene-workspace-section" value="identity" keepMounted aria-labelledby="moment-identity-heading">
+          <div className="scene-workspace-section-heading scene-section-description"><h3 id="moment-identity-heading">发布身份</h3><p>昵称、头像与个人封面</p></div>
+          <div className="moments-form">
+          <div className="moments-form-row moments-author-row">
+            <label className="moments-avatar-upload">
+              {draft.avatar ? <img src={draft.avatar} alt="头像" /> : <span>{draft.author.slice(0, 1) || '我'}</span>}
+              <input type="file" accept="image/*" aria-label="上传发布者头像" onChange={event => { void handleAvatar(event.target.files?.[0]) }} />
+            </label>
+            <label>昵称<Input className="me-input" value={draft.author} maxLength={20} onChange={event => update('author', event.target.value)} /></label>
+          </div>
+          <div className="moments-cover-editor">
+            <div className="moments-label-line"><span>朋友圈背景</span><small>封面图</small></div>
+            <div className="chat-background-control">
+              <div className="chat-background-color">
+                <ColorField
+                  aria-label="朋友圈背景颜色"
+                  value={draft.coverColor || '#75877f'}
+                  onValueChange={color => update('coverColor', color)}
+                />
+              </div>
+              <Button variant="outline" size="sm" className="btn btn-outline btn-sm" type="button" onClick={() => coverInputRef.current?.click()}>
+                <ImagePlus size={15} /> {draft.coverImage ? '更换背景图' : '上传背景图'}
+              </Button>
+              {draft.coverImage && (
+                <Button variant="ghost" size="sm" className="btn btn-ghost btn-sm" type="button" onClick={() => update('coverImage', null)}>
+                  <Trash2 size={15} /> 移除图片
+                </Button>
+              )}
+              <input ref={coverInputRef} type="file" accept="image/*" hidden onChange={event => { void handleCover(event.target.files?.[0]); event.currentTarget.value = '' }} />
+              {draft.coverImage && <img className="chat-background-thumb" src={draft.coverImage} alt="当前朋友圈背景预览" />}
+            </div>
+            <small className="form-helper">背景仅保存在当前浏览器，导出的朋友圈图片会保留。</small>
+            {coverError && <small className="form-error" role="alert">{coverError}</small>}
+          </div>
+          </div>
+        </TabsContent>
+        <TabsContent className="scene-workspace-section" value="content" keepMounted aria-labelledby="moment-content-heading">
+          <div className="scene-workspace-section-heading scene-section-description"><h3 id="moment-content-heading">动态内容</h3><p>文字、图片与发布信息</p></div>
+          <div className="moments-form">
+          <label>朋友圈内容<Textarea className="me-textarea moments-content-input" value={draft.content} rows={5} maxLength={500} onChange={event => update('content', event.target.value)} /></label>
+          <div>
+            <div className="moments-label-line"><span>图片</span><small>{draft.images.length}/9</small></div>
+            <div className="moments-image-editor">
+              {draft.images.map((image, index) => (
+                <div className="moments-edit-image" key={`${image.slice(-24)}-${index}`}>
+                  <img src={image} alt={`朋友圈图片 ${index + 1}`} />
+                  <Button variant="ghost" size="icon" style={{ width: 23, height: 23, padding: 0 }} type="button" aria-label={`删除第 ${index + 1} 张图片`} onClick={() => update('images', draft.images.filter((_, itemIndex) => itemIndex !== index))}><Trash2 size={13} /></Button>
+                </div>
+              ))}
+              {draft.images.length < 9 && <label className="moments-add-image"><ImagePlus size={20} /><span>添加图片</span><input type="file" accept="image/*" aria-label="添加朋友圈图片" multiple onChange={event => { void handleImages(event.target.files) }} /></label>}
+            </div>
+          </div>
+          <div className="moments-form-grid">
+            <label>发布时间<Input className="me-input" value={draft.timeLabel} maxLength={20} onChange={event => update('timeLabel', event.target.value)} /></label>
+            <label>所在位置<Input className="me-input" value={draft.location} maxLength={30} placeholder="可选" onChange={event => update('location', event.target.value)} /></label>
+          </div>
+          </div>
+        </TabsContent>
+        <TabsContent className="scene-workspace-section" value="social" keepMounted aria-labelledby="moment-social-heading">
+          <div className="scene-workspace-section-heading scene-section-description"><h3 id="moment-social-heading">点赞与评论</h3><p>添加创作中的互动信息</p></div>
+          <div className="moments-form">
+          <div className="moments-inline-editor">
+            <label>点赞用户<Input className="me-input" value={likeInput} placeholder="多个昵称用逗号分隔" onChange={event => setLikeInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) addLikes() }} /></label>
+            <Button variant="outline" className="btn btn-outline" type="button" onClick={addLikes}><Plus size={14} /> 添加</Button>
+          </div>
+          {draft.likes.length > 0 && <div className="moments-chip-list">{draft.likes.map(name => <Button variant="secondary" size="sm" style={{ height: 'auto' }} key={name} type="button" aria-label={`移除 ${name} 的点赞`} onClick={() => update('likes', draft.likes.filter(item => item !== name))}>{name}<X size={12} /></Button>)}</div>}
+          <div className="moments-comment-editor">
+            <label>评论人<Input className="me-input" value={commentAuthor} onChange={event => setCommentAuthor(event.target.value)} /></label>
+            <label>评论内容<Input className="me-input" value={commentContent} onChange={event => setCommentContent(event.target.value)} /></label>
+            <Button variant="outline" className="btn btn-outline" type="button" onClick={addComment}><Plus size={14} /> 添加评论</Button>
+          </div>
+          </div>
+        </TabsContent>
+        </Tabs>
+        <p className="scene-workspace-footnote">素材仅保存在当前浏览器。模拟内容仅用于创作与设计演示。</p>
+      </div>
+    </WorkspacePanels>
   )
 }

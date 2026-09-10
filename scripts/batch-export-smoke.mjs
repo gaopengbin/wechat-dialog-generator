@@ -1,0 +1,87 @@
+import assert from 'node:assert/strict'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { pathToFileURL } from 'node:url'
+
+const { chromium } = await import(pathToFileURL('C:/Users/Administrator/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs').href)
+const output = 'C:/Users/Administrator/Documents/test/outputs/batch-export'
+await mkdir(output, { recursive: true })
+const browser = await chromium.launch({ headless: true, executablePath: 'C:/Users/Administrator/AppData/Local/ms-playwright/chromium-1234/chrome-win64/chrome.exe' })
+const report = { checks: [], dimensions: [], errors: [] }
+try {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true })
+  await context.addInitScript(() => localStorage.setItem('wechat-dialog-generator:announcement-read', '2026-09-10-account-v1'))
+  await context.route('**/*', route => new URL(route.request().url()).origin === 'http://127.0.0.1:4178' ? route.continue() : route.abort())
+  await context.addInitScript(() => localStorage.setItem('wechat-dialog-generator:official-account-export-prompted', '1'))
+  const page = await context.newPage()
+  page.on('pageerror', error => report.errors.push(error.message))
+  const quota = () => page.locator('.batch-progress > span').nth(1).innerText()
+  const download = async name => {
+    const [file] = await Promise.all([page.waitForEvent('download', { timeout: 60000 }), page.getByRole('button', { name, exact: true }).click()])
+    return file
+  }
+  const add = async text => {
+    await page.getByRole('tab', { name: '导入聊天', exact: true }).click()
+    await page.locator('#batch-input').fill(text)
+    await page.locator('#batch-import-panel').getByRole('button', { name: '添加到批量队列', exact: true }).click()
+  }
+  const confirm = () => page.getByRole('checkbox', { name: '确认按聊天图片张数使用额度' }).check()
+  await page.goto('http://127.0.0.1:4178/?tool=batch')
+  assert.equal(await page.getByRole('button', { name: '加入当前编辑器的聊天', exact: true }).count(), 0)
+  await page.locator('#batch-input').fill('')
+  assert.equal(await page.getByRole('button', { name: '添加到批量队列', exact: true }).isDisabled(), true)
+  await page.locator('#batch-input').fill('# 输入框内容\n我：只添加这里的对话。')
+  await page.screenshot({ path: `${output}/import-desktop.png`, fullPage: true })
+  await page.setViewportSize({ width: 390, height: 844 })
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
+  await page.screenshot({ path: `${output}/import-mobile.png`, fullPage: true })
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await add('# 短对话\n我：周六有空吗？\n小林：有空，一起吃饭吧。\n我：好，老地方见！\n---\n# 长对话\n' + Array.from({ length: 30 }, (_, i) => `${i % 2 ? '小林' : '我'}：第 ${i + 1} 条消息，我们继续讨论页面细节。`).join('\n'))
+  assert.equal(await page.getByRole('button', { name: '导出所选 ZIP', exact: true }).count(), 1)
+  assert.equal(await page.getByRole('button', { name: '下载已选 ZIP', exact: true }).count(), 0)
+  await confirm()
+  await (await download('导出所选 ZIP')).saveAs(`${output}/automatic.zip`)
+  assert.equal(await quota(), '可用 8 次')
+  const zip = await readFile(`${output}/automatic.zip`)
+  for (let offset = 0; zip.readUInt32LE(offset) === 0x04034b50;) {
+    const size = zip.readUInt32LE(offset + 18), n = zip.readUInt16LE(offset + 26), extra = zip.readUInt16LE(offset + 28)
+    const name = zip.subarray(offset + 30, offset + 30 + n).toString('utf8')
+    const start = offset + 30 + n + extra, png = zip.subarray(start, start + size)
+    assert.equal(png.subarray(1, 4).toString(), 'PNG')
+    report.dimensions.push({ name, width: png.readUInt32BE(16), height: png.readUInt32BE(20) })
+    await writeFile(`${output}/${report.dimensions.length}.png`, png)
+    offset = start + size
+  }
+  assert.equal(report.dimensions.length, 2)
+  assert.equal(report.dimensions[0].width, 1125)
+  assert.equal(report.dimensions[0].height, 2436)
+  assert.equal(report.dimensions[1].width, 1125)
+  assert.ok(report.dimensions[1].height > 2436)
+  await download('重新下载已完成 ZIP')
+  assert.equal(await quota(), '可用 8 次')
+  report.checks.push('one click automatically downloads ZIP; short chat is one full phone screen, long chat expands; repeated download is free')
+  await add('# 失败项\n我：此项将编辑但不应用\n小林：测试失败保留')
+  assert.equal(await page.locator('.batch-chat-row').count(), 3)
+  assert.ok((await page.locator('.batch-chat-row').first().innerText()).includes('短对话'))
+  assert.equal(await page.locator('.batch-status-done').count(), 2)
+  report.checks.push('one input source, empty input disabled; appending keeps earlier conversations and completed exports intact')
+  await page.getByLabel('本组聊天记录').fill('未应用的修改')
+  await confirm()
+  await (await download('重试并导出 ZIP')).saveAs(`${output}/partial.zip`)
+  assert.equal(await quota(), '可用 8 次')
+  await page.getByRole('status').filter({ hasText: '1 组未完成' }).waitFor()
+  assert.equal(await page.getByRole('button', { name: '重试并导出 ZIP', exact: true }).count(), 1)
+  await page.getByLabel('本组聊天记录').fill('我：修正后重新导出\n小林：收到')
+  await page.getByRole('button', { name: '更新本组预览', exact: true }).click()
+  await confirm()
+  await download('导出所选 ZIP')
+  assert.equal(await quota(), '可用 7 次')
+  report.checks.push('partial failure automatically downloads successful images, keeps failure actionable, retry only charges new success')
+  await page.screenshot({ path: `${output}/desktop.png`, fullPage: true })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole('button', { name: '预览与导出', exact: true }).click()
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
+  await page.screenshot({ path: `${output}/mobile.png`, fullPage: true })
+  assert.deepEqual(report.errors, [])
+  await writeFile(`${output}/report.json`, JSON.stringify(report, null, 2))
+  console.log(JSON.stringify(report, null, 2))
+} finally { await browser.close() }

@@ -27,10 +27,22 @@ async function transform(bytes: Uint8Array, kind: 'compress' | 'decompress') {
   const stream = kind === 'compress'
     ? new CompressionStream('gzip')
     : new DecompressionStream('gzip')
-  const writer = stream.writable.getWriter()
-  await writer.write(bytes as Uint8Array<ArrayBuffer>)
-  await writer.close()
-  return new Uint8Array(await new Response(stream.readable).arrayBuffer())
+  const reader = new Blob([bytes as Uint8Array<ArrayBuffer>]).stream().pipeThrough(stream).getReader()
+  const chunks: Uint8Array[] = []
+  let length = 0
+  try {
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      length += value.byteLength
+      if (length > MAX_DECODED_BYTES) { await reader.cancel(); throw new Error('分享模板内容过大') }
+      chunks.push(value)
+    }
+  } finally { reader.releaseLock() }
+  const output = new Uint8Array(length)
+  let offset = 0
+  for (const chunk of chunks) { output.set(chunk, offset); offset += chunk.byteLength }
+  return output
 }
 
 function boundedNumber(value: unknown, fallback: number, minimum: number, maximum: number) {
@@ -111,8 +123,12 @@ export function sanitizeSharedSnapshot(value: unknown): ChatProjectSnapshot {
 
 export async function createSameTemplateUrl(snapshot: ChatProjectSnapshot, baseUrl: string) {
   const payload = JSON.stringify({ version: SHARE_VERSION, snapshot: sanitizeSharedSnapshot(snapshot) })
-  const compressed = await transform(new TextEncoder().encode(payload), 'compress')
+  const bytes = new TextEncoder().encode(payload)
+  if (bytes.length > MAX_DECODED_BYTES) throw new Error('分享模板内容过大，请精简对话')
+  const compressed = await transform(bytes, 'compress')
   const url = new URL(baseUrl)
+  // Never propagate somebody else's invitation or an incidental query token.
+  url.search = ''
   url.hash = `${SHARE_PREFIX}g1.${base64UrlEncode(compressed)}`
   if (url.href.length > MAX_SHARE_URL_LENGTH) {
     throw new Error('当前对话内容较多，分享链接过长，请精简消息后重试')
@@ -122,6 +138,7 @@ export async function createSameTemplateUrl(snapshot: ChatProjectSnapshot, baseU
 
 export async function readSameTemplateHash(hash: string) {
   if (!hash.startsWith(`#${SHARE_PREFIX}`)) return null
+  if (hash.length > MAX_SHARE_URL_LENGTH) throw new Error('分享链接过长')
   const token = hash.slice(SHARE_PREFIX.length + 1)
   if (!token.startsWith('g1.')) throw new Error('分享模板版本不受支持')
   const decoded = await transform(base64UrlDecode(token.slice(3)), 'decompress')

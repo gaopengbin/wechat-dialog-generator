@@ -1,8 +1,16 @@
+import { Input } from './ui/input';
+import { Textarea } from './ui/textarea';
+import { Button } from './ui/button';
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toCanvas } from 'html-to-image'
 import { Camera, ChevronRight, Download, MessageSquareText, Plus, QrCode, UserRound } from 'lucide-react'
 import { loadWechatScene, saveWechatScene, type WechatSceneKind, type WechatSceneProject } from '@/lib/project-store'
+import { SCENE_DEFAULT_FIELDS, refreshUntouchedSceneDemo } from '@/lib/demo-defaults'
 import { WechatPhoneChrome } from '@/components/WechatPhoneChrome'
+import { WorkspacePanels } from './WorkspacePanels'
+import { beginExportLog } from '@/lib/export-log'
+import { ScenePreviewFrame } from './ScenePreviewFrame'
+import './SceneWorkspace.css'
 
 interface FieldDefinition {
   key: string
@@ -30,7 +38,7 @@ const sceneDefinitions: Record<WechatSceneKind, {
       { key: 'orderNo', label: '转账单号' },
       { key: 'note', label: '转账说明' },
     ],
-    defaults: { avatar: '', payee: '小林', amount: '88.00', account: '小林', time: '2026-08-13 20:18:26', orderNo: '2026081320182688120635', note: '朋友聚餐' },
+    defaults: SCENE_DEFAULT_FIELDS.payment,
   },
   redpacket: {
     title: '红包详情页面',
@@ -42,7 +50,7 @@ const sceneDefinitions: Record<WechatSceneKind, {
       { key: 'amount', label: '领取金额' },
       { key: 'status', label: '领取状态' },
     ],
-    defaults: { avatar: '', sender: '高鹏彬', greeting: '恭喜发财，大吉大利', amount: '8.88', status: '已存入零钱' },
+    defaults: SCENE_DEFAULT_FIELDS.redpacket,
   },
   profile: {
     title: '个人资料页面',
@@ -54,7 +62,7 @@ const sceneDefinitions: Record<WechatSceneKind, {
       { key: 'region', label: '地区' },
       { key: 'signature', label: '个性签名', multiline: true },
     ],
-    defaults: { avatar: '', nickname: '高鹏彬', wechatId: 'gaopengbin', region: '浙江 杭州', signature: '保持好奇，持续创造。' },
+    defaults: SCENE_DEFAULT_FIELDS.profile,
   },
   group: {
     title: '群信息页面',
@@ -65,15 +73,15 @@ const sceneDefinitions: Record<WechatSceneKind, {
       { key: 'members', label: '成员昵称', placeholder: '使用逗号分隔' },
       { key: 'announcement', label: '群公告', multiline: true },
     ],
-    defaults: { name: 'AI 产品共创群', count: '8', members: '高鹏彬,小林,阿杰,徐言岩,产品同学,设计师', announcement: '欢迎交流产品想法，请勿发布无关广告。' },
+    defaults: SCENE_DEFAULT_FIELDS.group,
   },
 }
 
 interface WechatSceneEditorProps {
   kind: WechatSceneKind
   onToast: (message: string) => void
-  onBeforeExport?: () => Promise<boolean>
-  onExportSuccess?: () => void
+  onBeforeExport?: () => Promise<boolean | string>
+  onExportSuccess?: (ticket?: boolean | string) => void
 }
 
 export function WechatSceneEditor({ kind, onToast, onBeforeExport, onExportSuccess }: WechatSceneEditorProps) {
@@ -85,8 +93,9 @@ export function WechatSceneEditor({ kind, onToast, onBeforeExport, onExportSucce
 
   useEffect(() => {
     void loadWechatScene(kind).then(stored => {
-      setProject(stored ? { ...stored, fields: { ...definition.defaults, ...stored.fields } } : { id: kind, fields: definition.defaults, updatedAt: new Date(0).toISOString(), version: 1 })
-      setSaved(Boolean(stored))
+      const restored = stored && refreshUntouchedSceneDemo(stored)
+      setProject(restored ? { ...restored, fields: { ...definition.defaults, ...restored.fields } } : { id: kind, fields: definition.defaults, updatedAt: new Date(0).toISOString(), version: 1 })
+      setSaved(Boolean(stored && restored === stored))
       setReady(true)
     })
   }, [definition.defaults, kind])
@@ -116,49 +125,61 @@ export function WechatSceneEditor({ kind, onToast, onBeforeExport, onExportSucce
 
   const exportImage = async () => {
     if (!previewRef.current) return
+    const filename = `微信${definition.title}_${Date.now()}.png`
+    const log = beginExportLog({ tool: kind, mode: 'standard', filename })
     onToast('正在生成模拟页面…')
     try {
       const canvas = await toCanvas(previewRef.current, { pixelRatio: 2, backgroundColor: '#f5f5f5' })
-      if (onBeforeExport && !(await onBeforeExport())) return
+      const ticket = onBeforeExport ? await onBeforeExport() : true
+      if (!ticket) { void log.finish('cancelled', '额度校验未通过'); return }
       const link = document.createElement('a')
-      link.download = `微信${definition.title}_${Date.now()}.png`
+      link.download = filename
       link.href = canvas.toDataURL('image/png')
       link.click()
+      void log.finish('download_requested')
       onToast('图片已下载')
-      onExportSuccess?.()
+      onExportSuccess?.(ticket)
     } catch {
+      void log.finish('failed', '模拟页面生成或下载失败')
       onToast('图片生成失败')
     }
   }
 
   return (
-    <main className="scene-workbench" id="scene-editor">
-      <section className="scene-controls s-card">
-        <div className="s-card-header scene-card-heading"><h2><MessageSquareText size={18} /> {definition.title}</h2><span className="s-card-badge">{saved ? '已自动保存' : '本地草稿'}</span></div>
-        <div className="s-card-body scene-form">
-          <p>{definition.description}所有字段都只保存在当前浏览器。</p>
+    <WorkspacePanels
+      previewTitle={`${definition.title.replace('页面', '')}预览`}
+      previewDescription="模拟界面 · 仅用于创作与设计演示"
+      previewActions={<Button className="btn btn-primary" type="button" onClick={() => { void exportImage() }}><Download size={16} /> 导出模拟页面</Button>}
+      preview={
+        <ScenePreviewFrame captureRef={previewRef}>
+          <WechatPhoneChrome className={`scene-${kind}`} title={kind === 'payment' ? '' : kind === 'redpacket' ? '红包详情' : kind === 'profile' ? '个人信息' : `聊天信息(${project.fields.count || '0'})`}>
+            <ScenePreview kind={kind} fields={project.fields} />
+          </WechatPhoneChrome>
+        </ScenePreviewFrame>
+      }
+    >
+      <div className="scene-workspace-form" id={`scene-${kind}-editor`}>
+        <header className="scene-workspace-heading">
+          <div><h2><MessageSquareText size={17} /> {definition.title}</h2></div>
+          <span className="scene-workspace-save-state" role="status">{saved ? '已自动保存' : '本地草稿'}</span>
+        </header>
+        <section className="scene-workspace-section" aria-labelledby={`scene-${kind}-fields-heading`}>
+          <h3 className="sr-only" id={`scene-${kind}-fields-heading`}>页面内容</h3>
+          <div className="scene-form">
           {definition.fields.map(field => field.image ? (
             <label className="scene-avatar-field" key={field.key}>{field.label}<span className="scene-avatar-control">
               <span className="scene-avatar-thumb">{project.fields[field.key] ? <img src={project.fields[field.key]} alt="" /> : <UserRound size={25} />}</span>
               <span className="btn btn-outline"><Camera size={14} /> 上传头像</span>
               <input type="file" accept="image/*" onChange={event => updateImage(field.key, event.target.files?.[0])} />
             </span></label>
-          ) : <label key={field.key}>{field.label}{field.multiline
-            ? <textarea className="me-textarea" rows={4} value={project.fields[field.key] ?? ''} placeholder={field.placeholder} onChange={event => updateField(field.key, event.target.value)} />
-            : <input className="me-input" value={project.fields[field.key] ?? ''} placeholder={field.placeholder} onChange={event => updateField(field.key, event.target.value)} />}</label>)}
-          <div className="scene-safety-note">导出图片固定带有“模拟界面”标识，不用于伪造交易凭证、身份或欺骗他人。</div>
-          <button className="btn btn-primary" type="button" onClick={() => { void exportImage() }}><Download size={16} /> 导出模拟页面</button>
-        </div>
-      </section>
-      <section className="scene-preview-column">
-        <div className="moments-preview-label"><span>实时预览</span><small>模拟界面 · 仅用于创作与设计演示</small></div>
-        <div ref={previewRef}>
-          <WechatPhoneChrome className={`scene-${kind}`} title={kind === 'payment' ? '' : kind === 'redpacket' ? '红包详情' : kind === 'profile' ? '个人信息' : `聊天信息(${project.fields.count || '0'})`}>
-          <ScenePreview kind={kind} fields={project.fields} />
-          </WechatPhoneChrome>
-        </div>
-      </section>
-    </main>
+          ) : <label className={field.multiline ? "scene-field-wide" : undefined} key={field.key}>{field.label}{field.multiline
+            ? <Textarea className="me-textarea" rows={4} value={project.fields[field.key] ?? ''} placeholder={field.placeholder} onChange={event => updateField(field.key, event.target.value)} />
+            : <Input className="me-input" value={project.fields[field.key] ?? ''} placeholder={field.placeholder} onChange={event => updateField(field.key, event.target.value)} />}</label>)}
+          </div>
+        </section>
+        <div className="scene-safety-note">导出图片固定带有“模拟界面”标识，不用于伪造交易凭证、身份或欺骗他人。</div>
+      </div>
+    </WorkspacePanels>
   )
 }
 
@@ -182,5 +203,5 @@ function ScenePreview({ kind, fields }: { kind: WechatSceneKind; fields: Record<
     <div className="wechat-list-section profile-rows"><p><b>头像</b>{avatar(fields.nickname)}<ChevronRight size={18} /></p><p><b>名字</b><span>{fields.nickname}</span><ChevronRight size={18} /></p><p><b>拍一拍</b><span>设置拍一拍</span><ChevronRight size={18} /></p><p><b>微信号</b><span>{fields.wechatId}</span></p><p><b>我的二维码</b><QrCode size={22} /><ChevronRight size={18} /></p><p><b>更多</b><ChevronRight size={18} /></p></div>
     <div className="wechat-list-section profile-rows"><p><b>来电铃声</b><ChevronRight size={18} /></p><p><b>个性签名</b><span>{fields.signature}</span><ChevronRight size={18} /></p><p><b>地区</b><span>{fields.region}</span><ChevronRight size={18} /></p></div>
   </div>
-  return <div className="group-preview"><div className="group-members">{members.slice(0, 8).map((member, index) => <div key={`${member}-${index}`}><span>{member.slice(0, 1)}</span><small>{member}</small></div>)}<div><span><Plus size={26} /></span><small>添加</small></div></div><div className="wechat-list-section group-rows"><p><b>群聊名称</b><span>{fields.name}</span><ChevronRight size={18} /></p><p><b>群二维码</b><QrCode size={22} /><ChevronRight size={18} /></p><p><b>群公告</b><span>{fields.announcement}</span><ChevronRight size={18} /></p><p><b>备注</b><ChevronRight size={18} /></p></div><div className="wechat-list-section group-rows"><p><b>消息免打扰</b><i className="scene-switch" /></p><p><b>置顶聊天</b><i className="scene-switch is-on" /></p><p><b>保存到通讯录</b><i className="scene-switch is-on" /></p></div><div className="wechat-list-section group-rows"><p><b>查找聊天记录</b><ChevronRight size={18} /></p></div><button className="group-danger" type="button">清空聊天记录</button></div>
+  return <div className="group-preview"><div className="group-members">{members.slice(0, 8).map((member, index) => <div key={`${member}-${index}`}><span>{member.slice(0, 1)}</span><small>{member}</small></div>)}<div><span><Plus size={26} /></span><small>添加</small></div></div><div className="wechat-list-section group-rows"><p><b>群聊名称</b><span>{fields.name}</span><ChevronRight size={18} /></p><p><b>群二维码</b><QrCode size={22} /><ChevronRight size={18} /></p><p><b>群公告</b><span>{fields.announcement}</span><ChevronRight size={18} /></p><p><b>备注</b><ChevronRight size={18} /></p></div><div className="wechat-list-section group-rows"><p><b>消息免打扰</b><i className="scene-switch" /></p><p><b>置顶聊天</b><i className="scene-switch is-on" /></p><p><b>保存到通讯录</b><i className="scene-switch is-on" /></p></div><div className="wechat-list-section group-rows"><p><b>查找聊天记录</b><ChevronRight size={18} /></p></div><Button className="group-danger" type="button">清空聊天记录</Button></div>
 }

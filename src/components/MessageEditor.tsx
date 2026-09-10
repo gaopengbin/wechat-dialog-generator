@@ -1,6 +1,12 @@
+import { Disclosure } from './ui/controls';
 import { useState, useRef } from 'react';
-import { PlusCircle, Type, Image, Gift, Banknote, Mic, Clock } from 'lucide-react';
+import { PlusCircle, Type, Image, Gift, Banknote, Mic, Clock, X } from 'lucide-react';
 import type { ChatUser, ChatMessage, MessageType } from '@/types';
+import { Input } from './ui/input';
+import { Textarea } from './ui/textarea';
+import { SelectField } from './ui/select';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/controls';
+import { Button } from './ui/button';
 
 interface MessageEditorProps {
   users: ChatUser[];
@@ -103,7 +109,7 @@ export function MessageEditor({ users, selfId, onAddMessage }: MessageEditorProp
   const renderFields = () => {
     if (msgType === 'time') {
       return (
-        <input
+        <Input
           className="me-input"
           type="text"
           placeholder="如：3月15日 下午14:00"
@@ -115,21 +121,16 @@ export function MessageEditor({ users, selfId, onAddMessage }: MessageEditorProp
 
     return (
       <>
-        <select
-          className="me-select"
-          value={senderId}
-          onChange={e => setSenderId(e.target.value ? Number(e.target.value) : '')}
-        >
-          <option value="">选择发送人</option>
-          {users.map(u => (
-            <option key={u.id} value={u.id}>
-              {u.name}{u.id === selfId ? '（自己）' : ''}
-            </option>
-          ))}
-        </select>
+        <SelectField
+          aria-label="发送人"
+          value={String(senderId)}
+          onValueChange={value => setSenderId(value ? Number(value) : '')}
+          placeholder="选择发送人"
+          options={[{ value: '', label: '选择发送人' }, ...users.map(user => ({ value: String(user.id), label: `${user.name}${user.id === selfId ? '（自己）' : ''}` }))]}
+        />
 
         {msgType === 'text' && (
-          <textarea
+          <Textarea
             className="me-textarea"
             placeholder="输入消息内容..."
             value={textContent}
@@ -143,20 +144,20 @@ export function MessageEditor({ users, selfId, onAddMessage }: MessageEditorProp
             {imagePreview ? (
               <div className="me-img-preview">
                 <img src={imagePreview} alt="" />
-                <button className="me-img-remove" onClick={() => setImagePreview(null)}>✕</button>
+                <Button variant="destructive" size="icon" type="button" className="me-img-remove" style={{ width: 20, height: 20, padding: 0 }} aria-label="移除消息图片" onClick={() => setImagePreview(null)}><X size={14} /></Button>
               </div>
             ) : (
-              <button className="me-img-upload" onClick={() => imgRef.current?.click()}>
+              <Button variant="outline" className="me-img-upload" style={{ width: 100, height: 80 }} onClick={() => imgRef.current?.click()}>
                 <Image size={20} />
                 <span>选择图片</span>
-              </button>
+              </Button>
             )}
             <input ref={imgRef} type="file" accept="image/*" hidden onChange={handleImageChange} />
           </div>
         )}
 
         {msgType === 'redpacket' && (
-          <input
+          <Input
             className="me-input"
             type="text"
             placeholder="红包备注（默认：恭喜发财，大吉大利）"
@@ -167,7 +168,7 @@ export function MessageEditor({ users, selfId, onAddMessage }: MessageEditorProp
 
         {msgType === 'transfer' && (
           <div className="me-row">
-            <input
+            <Input
               className="me-input"
               type="text"
               placeholder="金额"
@@ -175,7 +176,7 @@ export function MessageEditor({ users, selfId, onAddMessage }: MessageEditorProp
               onChange={e => setAmount(e.target.value)}
               style={{ flex: 1 }}
             />
-            <input
+            <Input
               className="me-input"
               type="text"
               placeholder="备注（默认：转账）"
@@ -188,7 +189,7 @@ export function MessageEditor({ users, selfId, onAddMessage }: MessageEditorProp
 
         {msgType === 'voice' && (
           <div className="me-row">
-            <input
+            <Input
               className="me-input"
               type="number"
               min={1}
@@ -199,7 +200,7 @@ export function MessageEditor({ users, selfId, onAddMessage }: MessageEditorProp
               style={{ width: 100 }}
             />
             <span className="me-hint">秒</span>
-            <textarea
+            <Textarea
               className="me-textarea"
               placeholder="转文字内容（可选）"
               value={voiceTranscript}
@@ -214,29 +215,30 @@ export function MessageEditor({ users, selfId, onAddMessage }: MessageEditorProp
   };
 
   return (
-    <div className="s-card">
-      <div className="s-card-header">
-        <h2><PlusCircle size={20} /> 添加消息</h2>
-      </div>
+    <div className="s-card message-editor-card">
+      <Disclosure title={<span className="message-editor-heading"><PlusCircle size={17} /> 添加消息</span>}>
       <div className="s-card-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div className="me-type-tabs">
+        <Tabs value={msgType} onValueChange={value => setMsgType(value as MessageType)}>
+        <TabsList className="me-type-tabs" aria-label="消息类型">
           {MSG_TYPES.map(t => (
-            <button
+            <TabsTrigger
               key={t.type}
+              value={t.type}
               className={`me-type-tab ${msgType === t.type ? 'active' : ''}`}
-              onClick={() => setMsgType(t.type)}
             >
               {t.icon} {t.label}
-            </button>
+            </TabsTrigger>
           ))}
-        </div>
+        </TabsList>
 
-        {renderFields()}
+        {MSG_TYPES.map(type => <TabsContent key={type.type} value={type.type} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>{msgType === type.type && renderFields()}</TabsContent>)}
+        </Tabs>
 
-        <button className="btn btn-primary btn-sm" onClick={handleAdd}>
+        <Button size="sm" className="btn btn-primary btn-sm" onClick={handleAdd}>
           <PlusCircle size={15} /> 添加
-        </button>
+        </Button>
       </div>
+      </Disclosure>
     </div>
   );
 }
