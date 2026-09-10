@@ -2,7 +2,7 @@
 
 ## Scope
 
-Workpage editing controls use shared shadcn-style compositions built on `@base-ui/react` 1.8.0. The toolbox's existing light-green Vercel-style layout is preserved. This is a local frontend change, not a production deployment, payment change, or account/quota migration.
+Workpage editing controls use shared shadcn-style compositions built on `@base-ui/react` 1.8.0. The toolbox's existing light-green Vercel-style layout is preserved. This document records the component migration and its original local verification; the components are included in the v0.1.0 release preparation. Production deployment completion is verified separately. The component migration itself does not migrate accounts or quota.
 
 Sources inspected before implementation:
 
@@ -25,7 +25,7 @@ Visible workpage native selects, color/time pickers, checkboxes, range sliders, 
 
 Batch controls receive explicit `disabled` and guarded callbacks. A disabled fieldset alone is not sufficient for portaled composite controls. Export rendering, job IDs, debit idempotency, retries and ZIP download behavior are preserved.
 
-## Verification
+## Original local verification (2026-09-10)
 
 - `npm test`: 31 tests pass.
 - `npm run build`, `npm run lint`: pass. Vite still reports a non-blocking large bundle warning.
