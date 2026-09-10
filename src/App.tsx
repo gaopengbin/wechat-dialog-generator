@@ -1,6 +1,11 @@
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/controls';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { useConfirm } from '@/lib/use-confirm';
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { toCanvas } from 'html-to-image';
-import { BellRing, CircleDollarSign, Download, Copy, Gift, Image as ImageIcon, MessageSquare, Share2, ShieldCheck, Sparkles, UserRound, UsersRound, Zap } from 'lucide-react';
+import { captureChatPhone } from '@/lib/capture-chat';
+import { ArrowLeft, ArrowRight, BellRing, BookOpen, Check, ChevronRight, Download, Copy, FolderOpen, History, Image as ImageIcon, LayoutGrid, MessageSquare, Settings2, Share2, ShieldCheck, UserRound, UsersRound } from 'lucide-react';
 import { ImportPanel } from '@/components/ImportPanel';
 import { UserAvatarManager } from '@/components/UserAvatarManager';
 import { MessageEditor } from '@/components/MessageEditor';
@@ -11,7 +16,16 @@ import { ProjectPanel } from '@/components/ProjectPanel';
 import { MomentsEditor } from '@/components/MomentsEditor';
 import { WechatSceneEditor } from '@/components/WechatSceneEditor';
 import { AccountDialog } from '@/components/AccountDialog';
+import { PaymentDialog } from '@/components/PaymentDialog';
+import { UpdateAnnouncement } from '@/components/UpdateAnnouncement';
 import { ShareDialog } from '@/components/ShareDialog';
+import { BatchStudio } from '@/components/BatchStudio';
+import { ExportLogPage } from '@/components/ExportLogPage';
+import { beginExportLog, exportLogError } from '@/lib/export-log';
+import { WorkspacePanels } from '@/components/WorkspacePanels';
+import { StudioLink, ToolHome } from '@/components/ToolHome';
+import { workspaceTools } from '@/lib/workspace-tools';
+import { readWorkspaceRoute, workspaceHref, type WorkspaceRoute } from '@/lib/workspace-route';
 import { trackGrowthEvent } from '@/lib/growth-analytics';
 import { RewardHeaderButton, RewardPromotion } from '@/components/RewardPromotion';
 import {
@@ -39,6 +53,8 @@ import {
 } from '@/lib/product-analytics';
 import {
   AccountApiError,
+  captureExportIdentity, assertExportIdentity, isExportIdentityCurrent,
+  type ExportIdentity,
   verifyAccountEmail, pendingInvite, visitInvite, completeAccountExport,
   consumeAccountExport,
   consumeGuestExport,
@@ -49,6 +65,7 @@ import {
   registerAccount,
   restoreAccount,
   type AccountSession,
+  type ExportQuota,
 } from '@/lib/account-api';
 import { createSameTemplateUrl, readSameTemplateHash } from '@/lib/share-link';
 import type { ChatUser, ChatMessage, PhoneSettings } from '@/types';
@@ -72,21 +89,35 @@ const defaultSettings: PhoneSettings = {
 function App() {
   const [officialAccountPrompt, setOfficialAccountPrompt] = useState<OfficialAccountPlacement | null>(null);
   const [accountPrompt, setAccountPrompt] = useState(false);
+  const [paymentPrompt, setPaymentPrompt] = useState(false);
   const [accountSession, setAccountSession] = useState<AccountSession | null>(null);
-  const [visibleQuota, setVisibleQuota] = useState(() => guestQuota());
+  const accountSessionRef = useRef(accountSession);
+  useEffect(() => { accountSessionRef.current = accountSession }, [accountSession]);
+  const [visibleQuota, setVisibleQuota] = useState<ExportQuota>(() => guestQuota());
+  const unlimited = Boolean(visibleQuota.membership?.active && Date.parse(visibleQuota.membership.expires_at || '') > Date.now());
   const [accountBusy, setAccountBusy] = useState(false);
   const [accountError, setAccountError] = useState('');
   const [redeemMessage, setRedeemMessage] = useState('');
-  const [activeTool, setActiveTool] = useState<WechatTool>(() => {
-    try {
-      const stored = localStorage.getItem('wechat-dialog-generator:active-tool');
-      return ['moments', 'payment', 'redpacket', 'profile', 'group'].includes(stored ?? '')
-        ? stored as WechatTool
-        : 'chat';
-    } catch {
-      return 'chat';
-    }
-  });
+  const [route, setRoute] = useState<WorkspaceRoute>(() => readWorkspaceRoute(window.location.href));
+  const isWorking = route !== 'home' && route !== 'resources' && route !== 'exports';
+  const activeTool: WechatTool = isWorking ? route : 'chat';
+  const { request: confirmation, confirm, resolve: resolveConfirmation } = useConfirm();
+  const [chatSection, setChatSection] = useState<'content' | 'people' | 'settings' | 'projects'>('content');
+  const navigate = useCallback((next: WorkspaceRoute) => {
+    window.history.pushState(null, '', workspaceHref(next, window.location.href));
+    setRoute(next);
+  }, []);
+  useEffect(() => {
+    const syncRoute = () => setRoute(readWorkspaceRoute(window.location.href));
+    window.addEventListener('popstate', syncRoute);
+    window.addEventListener('hashchange', syncRoute);
+    return () => { window.removeEventListener('popstate', syncRoute); window.removeEventListener('hashchange', syncRoute); };
+  }, []);
+  useEffect(() => {
+    // Each independently addressable work page gets its own browser-tab title.
+    const title = workspaceTools.find(tool => tool.id === route)?.title || (route === 'exports' ? '导出日志' : route === 'resources' ? '模板与指南' : '工具概览');
+    document.title = `${title} · 微信创作工具箱`;
+  }, [route]);
   const [importText, setImportText] = useState('');
   const [users, setUsers] = useState<ChatUser[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -104,7 +135,7 @@ function App() {
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const dialogTracked = useRef(false);
   const inviteLandingTracked = useRef(false);
-  const editorRef = useRef<HTMLElement | null>(null);
+  const editorRef = useRef<HTMLDivElement | null>(null);
   const restoredProjectTracked = useRef(false);
   const skipNextSave = useRef(false);
 
@@ -124,13 +155,14 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!isWorking) return;
     try {
       localStorage.setItem('wechat-dialog-generator:active-tool', activeTool);
     } catch {
       // Tool switching still works for the current page session.
     }
     void trackProductEvent('tool_selected', { tool: activeTool });
-  }, [activeTool]);
+  }, [activeTool, isWorking]);
 
   useEffect(() => {
     let cancelled = false;
@@ -153,7 +185,7 @@ function App() {
           if (!cancelled) setToast('分享模板已失效或内容格式不正确');
         }
         if (sharedSnapshot) {
-          setActiveTool('chat');
+          setRoute('chat');
           setImportText(sharedSnapshot.importText);
           setUsers(sharedSnapshot.users);
           setMessages(sharedSnapshot.messages);
@@ -164,7 +196,7 @@ function App() {
           setActiveProjectCreatedAt(null);
           setSaveState('idle');
           dialogTracked.current = sharedSnapshot.messages.length > 0;
-          window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+          window.history.replaceState(null, '', workspaceHref('chat', window.location.href));
           void trackProductEvent('shared_template_opened');
           return;
         }
@@ -286,6 +318,12 @@ function App() {
     toastTimer.current = setTimeout(() => setToast(''), 2500);
   }, []);
 
+  useEffect(() => {
+    const warn = () => showToast('导出日志保存失败，不影响本次导出；请检查浏览器存储权限或剩余空间。');
+    window.addEventListener(exportLogError, warn);
+    return () => window.removeEventListener(exportLogError, warn);
+  }, [showToast]);
+
   const openOfficialAccountPrompt = useCallback((placement: OfficialAccountPlacement) => {
     if (placement === 'export') {
       try {
@@ -376,16 +414,30 @@ function App() {
     catch (error) { setAccountError(error instanceof Error ? error.message : '验证失败'); }
     finally { setAccountBusy(false); }
   }, [showToast]);
+  const exportIdentities = useRef(new Map<string, ExportIdentity>());
   const completeExport = useCallback((ticket: string | boolean | undefined) => {
-    if (typeof ticket === 'string') void completeAccountExport(ticket).catch(() => showToast('图片已生成，但奖励确认失败；请稍后再次导出以重试邀请结算'));
+    if (typeof ticket === 'string') {
+      const identity = exportIdentities.current.get(ticket);
+      if (!identity || !isExportIdentityCurrent(identity)) return;
+      void completeAccountExport(ticket, identity).catch(() => showToast('图片已生成，但奖励确认失败；请稍后再次导出以重试邀请结算'));
+    }
   }, [showToast]);
+
+  const applyExportQuota = useCallback((identity: ExportIdentity, quota: ExportQuota) => {
+    if (!isExportIdentityCurrent(identity) || (accountSessionRef.current?.user.id ?? null) !== identity.userId) return;
+    setVisibleQuota(quota);
+    setAccountSession(current => current?.user.id === identity.userId ? { ...current, quota } : current);
+  }, []);
+  const exportIdentity = captureExportIdentity(accountSession);
 
   const authorizeExport = useCallback(async () => {
     try {
-      const reservation = accountSession ? await consumeAccountExport() : null;
+      const identity = exportIdentity;
+      assertExportIdentity(identity);
+      const reservation = identity.userId ? await consumeAccountExport(crypto.randomUUID(), identity) : null;
       const quota = reservation ? reservation.quota : consumeGuestExport();
-      setVisibleQuota(quota);
-      if (accountSession) setAccountSession(current => current ? { ...current, quota } : current);
+      if (reservation) exportIdentities.current.set(reservation.action_id, identity);
+      applyExportQuota(identity, quota);
       return reservation?.action_id || true;
     } catch (error) {
       const message = error instanceof Error ? error.message : '暂时无法确认导出额度';
@@ -399,7 +451,24 @@ function App() {
       }
       return false;
     }
-  }, [accountSession, openOfficialAccountPrompt, showToast]);
+  }, [accountSession, exportIdentity, applyExportQuota, openOfficialAccountPrompt, showToast]);
+
+  const batchOwners = useRef(new Map<string, string>());
+  const batchGuestDebits = useRef(new Set<string>());
+  const debitBatchExport = useCallback(async (id: string) => {
+    const identity = exportIdentity;
+    assertExportIdentity(identity);
+    const owner = identity.userId || 'guest';
+    const previousOwner = batchOwners.current.get(id);
+    if (previousOwner && previousOwner !== owner) throw new Error('账号已切换，请回到原账号重试这张卡片，避免重复扣费。');
+    batchOwners.current.set(id, owner);
+    if (!identity.userId && batchGuestDebits.current.has(id)) return;
+    const result = identity.userId ? await consumeAccountExport(id, identity) : null;
+    const quota = result ? result.quota : consumeGuestExport();
+    if (!identity.userId) batchGuestDebits.current.add(id);
+    else exportIdentities.current.set(id, identity);
+    applyExportQuota(identity, quota);
+  }, [exportIdentity, applyExportQuota]);
 
   const handleRedeem = useCallback(async (code: string) => {
     setAccountBusy(true);
@@ -522,7 +591,7 @@ function App() {
   }, [showToast]);
 
   const handleDeleteProject = useCallback(async (project: ChatProject) => {
-    if (!window.confirm(`确定删除“${project.name}”吗？此操作无法撤销。`)) return;
+    if (!await confirm({ title: '删除本地草稿？', description: `确定删除“${project.name}”吗？此操作无法撤销。`, confirmText: '删除草稿' })) return;
     try {
       await deleteProject(project.id);
       setProjects(current => current.filter(item => item.id !== project.id));
@@ -531,26 +600,23 @@ function App() {
     } catch {
       showToast('删除项目失败');
     }
-  }, [activeProjectId, resetEditor, showToast]);
+  }, [activeProjectId, confirm, resetEditor, showToast]);
 
   const handleUseTemplate = useCallback((content: string, templateId: string) => {
     setImportText(content);
+    navigate('chat');
+    setChatSection('content');
     void trackProductEvent('template_used', { tool: 'chat', template_id: templateId });
     editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     showToast('模板已载入，点击“解析并导入”即可预览');
-  }, [showToast]);
-
-  const handleShare = useCallback(async () => {
-    trackGrowthEvent('promotion_clicked', { placement: 'hero', offer: 'referral' });
-    setShareOpen(true);
-  }, []);
+  }, [showToast, navigate]);
 
   const handleShareSame = useCallback(async () => {
     if (!messages.length) {
       showToast('请先创建对话内容');
       return;
     }
-    if (!window.confirm('分享链接会包含当前对话文字和样式，不包含已上传的头像与图片。确定生成吗？')) return;
+    if (!await confirm({ title: '生成同款分享链接？', description: '链接会包含当前对话文字和样式，不包含已上传的头像与图片。请确认内容适合公开分享。', confirmText: '生成链接' })) return;
     try {
       const snapshot: ChatProjectSnapshot = { importText, users, messages, settings, selfId };
       const url = await createSameTemplateUrl(snapshot, window.location.href);
@@ -570,7 +636,7 @@ function App() {
       if (error instanceof DOMException && error.name === 'AbortError') return;
       showToast(error instanceof Error ? error.message : '生成同款链接失败');
     }
-  }, [activeProjectName, importText, messages, selfId, settings, showToast, users]);
+  }, [activeProjectName, confirm, importText, messages, selfId, settings, showToast, users]);
 
   const handleImport = useCallback(() => {
     if (!importText.trim()) {
@@ -618,127 +684,25 @@ function App() {
     });
   }, []);
 
-  // 用 html-to-image 截图（基于浏览器自身渲染，无文字偏移问题）
-  const capturePhone = useCallback(async (longshot = false): Promise<HTMLCanvasElement | null> => {
-    const phone = phoneRef.current;
-    if (!phone) return null;
-    const content = phone.closest('.wc-phone-content') as HTMLElement | null;
-    const wrap = phone.closest('.wc-phone-wrap') as HTMLElement | null;
-    const scaleWrap = phone.closest('.wc-phone-scale-wrap') as HTMLElement | null;
-    if (!content || !wrap) return null;
-
-    // 保存原始样式
-    const saved = {
-      ct: content.style.transform, co: content.style.transformOrigin,
-      ww: wrap.style.width, wh: wrap.style.height, wo: wrap.style.overflow,
-      wr: wrap.style.borderRadius, ws: wrap.style.boxShadow,
-      sp: scaleWrap?.style.position ?? '', st: scaleWrap?.style.top ?? '',
-      sl: scaleWrap?.style.left ?? '', sw: scaleWrap?.style.width ?? '',
-      sh: scaleWrap?.style.height ?? '',
-    };
-
-    // 记录当前聊天区滚动位置
-    const chatBody = phone.querySelector('.wc-chat-body') as HTMLElement | null;
-    const chatContent = phone.querySelector('.wc-chat-content') as HTMLElement | null;
-    const scrollTop = chatBody?.scrollTop ?? 0;
-    const savedContentMargin = chatContent?.style.marginTop ?? '';
-
-    // 移除缩放，展开至原始尺寸
-    content.style.transform = 'none';
-    wrap.style.width = '1125px';
-    wrap.style.height = '2436px';
-    wrap.style.overflow = 'hidden';
-    wrap.style.borderRadius = '0';
-    wrap.style.boxShadow = 'none';
-    if (scaleWrap) {
-      scaleWrap.style.position = 'fixed';
-      scaleWrap.style.top = '0';
-      scaleWrap.style.left = '-9999px';
-      scaleWrap.style.width = '1125px';
-      scaleWrap.style.height = '2436px';
-    }
-
-    // 普通截图：用 margin-top 偏移模拟当前滚动位置（html-to-image 克隆会丢失 scrollTop）
-    if (!longshot && chatContent && scrollTop > 0) {
-      chatContent.style.marginTop = `-${scrollTop}px`;
-    }
-
-    // 长截图：释放 chat body 滚动
-    let longOrig: Record<string, string> | null = null;
-    if (longshot) {
-      const bottom = phone.querySelector('.wc-bottom') as HTMLElement;
-      if (chatBody && bottom) {
-        longOrig = {
-          ph: phone.style.height, po: phone.style.overflow,
-          bp: chatBody.style.position, bt: chatBody.style.top, bb: chatBody.style.bottom,
-          bo: chatBody.style.overflowY, bh: chatBody.style.height,
-          dp: bottom.style.position, db: bottom.style.bottom,
-        };
-        phone.style.height = 'auto'; phone.style.overflow = 'visible';
-        wrap.style.height = 'auto';
-        chatBody.style.position = 'relative'; chatBody.style.top = 'auto';
-        chatBody.style.bottom = 'auto'; chatBody.style.overflowY = 'visible';
-        chatBody.style.height = 'auto';
-        bottom.style.position = 'relative'; bottom.style.bottom = 'auto';
-      }
-    }
-
-    // 等待浏览器重新布局
-    await new Promise(r => setTimeout(r, 50));
-    const totalH = longshot ? phone.scrollHeight : 2436;
-
-    let canvas: HTMLCanvasElement | null = null;
-    try {
-      canvas = await toCanvas(phone, {
-        width: 1125,
-        height: totalH,
-        pixelRatio: 1,
-        backgroundColor: '#ededed',
-      });
-    } finally {
-      // 还原所有样式
-      content.style.transform = saved.ct; content.style.transformOrigin = saved.co;
-      wrap.style.width = saved.ww; wrap.style.height = saved.wh;
-      wrap.style.overflow = saved.wo; wrap.style.borderRadius = saved.wr;
-      wrap.style.boxShadow = saved.ws;
-      if (scaleWrap) {
-        scaleWrap.style.position = saved.sp; scaleWrap.style.top = saved.st;
-        scaleWrap.style.left = saved.sl; scaleWrap.style.width = saved.sw;
-        scaleWrap.style.height = saved.sh;
-      }
-      // 还原滚动偏移
-      if (chatContent) chatContent.style.marginTop = savedContentMargin;
-      // 还原聊天区滚动位置
-      if (chatBody && scrollTop > 0) {
-        requestAnimationFrame(() => { chatBody.scrollTop = scrollTop; });
-      }
-      if (longshot && longOrig) {
-        const chatBody = phone.querySelector('.wc-chat-body') as HTMLElement;
-        const bottom = phone.querySelector('.wc-bottom') as HTMLElement;
-        if (chatBody && bottom) {
-          phone.style.height = longOrig.ph; phone.style.overflow = longOrig.po;
-          chatBody.style.position = longOrig.bp; chatBody.style.top = longOrig.bt;
-          chatBody.style.bottom = longOrig.bb; chatBody.style.overflowY = longOrig.bo;
-          chatBody.style.height = longOrig.bh;
-          bottom.style.position = longOrig.dp; bottom.style.bottom = longOrig.db;
-        }
-      }
-    }
-    return canvas;
+  const capturePhone = useCallback(async (longshot = false) => {
+    return phoneRef.current ? captureChatPhone(phoneRef.current, longshot) : null;
   }, []);
 
   const handleGenerateImage = useCallback(async () => {
     if (!phoneRef.current) return;
+    const filename = '微信聊天记录_' + Date.now() + '.png';
+    const log = beginExportLog({ tool: 'chat', mode: 'standard', filename });
     showToast('正在生成图片...');
     try {
       const canvas = await capturePhone(false);
-      if (!canvas) return;
+      if (!canvas) { void log.finish('failed', '未能获取聊天预览'); return; }
       const ticket = await authorizeExport();
-      if (!ticket) return;
+      if (!ticket) { void log.finish('cancelled', '额度校验未通过'); return; }
       const link = document.createElement('a');
-      link.download = '微信聊天记录_' + Date.now() + '.png';
+      link.download = filename;
       link.href = canvas.toDataURL('image/png');
       link.click();
+      void log.finish('download_requested');
       completeExport(ticket);
       void trackProductEvent('image_exported', {
         capture_mode: 'standard',
@@ -748,22 +712,25 @@ function App() {
       showToast('图片已生成并下载！');
       promptAfterExport();
     } catch (e: unknown) {
+      void log.finish('failed', '图片生成或下载操作失败');
       showToast('生成失败：' + (e instanceof Error ? e.message : String(e)));
     }
   }, [showToast, capturePhone, messages.length, promptAfterExport, authorizeExport, completeExport]);
 
   const handleCopyImage = useCallback(async () => {
     if (!phoneRef.current) return;
+    const log = beginExportLog({ tool: 'chat', mode: 'clipboard' });
     showToast('正在生成图片...');
     try {
       const canvas = await capturePhone(false);
-      if (!canvas) return;
+      if (!canvas) { void log.finish('failed', '未能获取聊天预览'); return; }
       canvas.toBlob(async (blob) => {
-        if (!blob) return;
+        if (!blob) { void log.finish('failed', '图片转换失败'); return; }
         try {
           const ticket = await authorizeExport();
-          if (!ticket) return;
+          if (!ticket) { void log.finish('cancelled', '额度校验未通过'); return; }
           await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+          void log.finish('copied');
           completeExport(ticket);
           void trackProductEvent('image_exported', {
             capture_mode: 'clipboard',
@@ -773,26 +740,31 @@ function App() {
           showToast('图片已复制到剪贴板！');
           promptAfterExport();
         } catch {
+          void log.finish('failed', '图片复制失败，请检查剪贴板权限');
           showToast('复制失败，请使用下载功能');
         }
       });
     } catch {
+      void log.finish('failed', '图片生成失败');
       showToast('操作失败');
     }
   }, [showToast, capturePhone, messages.length, promptAfterExport, authorizeExport, completeExport]);
 
   const handleGenerateLongImage = useCallback(async () => {
     if (!phoneRef.current) return;
+    const filename = '微信聊天记录_长截图_' + Date.now() + '.png';
+    const log = beginExportLog({ tool: 'chat', mode: 'long', filename });
     showToast('正在生成长截图...');
     try {
       const canvas = await capturePhone(true);
-      if (!canvas) return;
+      if (!canvas) { void log.finish('failed', '未能获取聊天预览'); return; }
       const ticket = await authorizeExport();
-      if (!ticket) return;
+      if (!ticket) { void log.finish('cancelled', '额度校验未通过'); return; }
       const link = document.createElement('a');
-      link.download = '微信聊天记录_长截图_' + Date.now() + '.png';
+      link.download = filename;
       link.href = canvas.toDataURL('image/png');
       link.click();
+      void log.finish('download_requested');
       completeExport(ticket);
       void trackProductEvent('image_exported', {
         capture_mode: 'long',
@@ -802,6 +774,7 @@ function App() {
       showToast('长截图已生成并下载！');
       promptAfterExport();
     } catch (e: unknown) {
+      void log.finish('failed', '长图生成或下载操作失败');
       showToast('生成失败：' + (e instanceof Error ? e.message : String(e)));
     }
   }, [showToast, capturePhone, messages.length, promptAfterExport, authorizeExport, completeExport]);
@@ -810,133 +783,66 @@ function App() {
 
   return (
     <>
-      <header className="app-header">
-        <h1>
-          <MessageSquare size={22} />
-          微信创作工具箱
-        </h1>
-        <div className="app-header-right">
-          {!hasMessages && activeTool === 'chat' && (
-            <nav className="app-nav" aria-label="页面导航">
-              <a href="#editor">开始制作</a>
-              <a href="#templates">模板</a>
-              <a href="#guide">教程</a>
-              <a href="#faq">常见问题</a>
-            </nav>
-          )}
-          {hasMessages && activeTool === 'chat' && (
-            <div className="app-header-actions">
-              <button className="btn btn-primary btn-sm" onClick={handleGenerateImage}>
-                <Download size={15} /> 生成图片
-              </button>
-              <button className="btn btn-outline btn-sm" onClick={handleCopyImage}>
-                <Copy size={15} /> 复制
-              </button>
-              <button className="btn btn-outline btn-sm" onClick={handleGenerateLongImage}>
-                <ImageIcon size={15} /> 长截图
-              </button>
-              <button className="btn btn-outline btn-sm" onClick={handleShareSame}>
-                <Share2 size={15} /> 生成同款
-              </button>
+      <div className={`studio-app ${isWorking ? 'is-working' : ''}`}>
+        <header className="studio-header">
+          <StudioLink route="home" onNavigate={navigate} className="studio-brand"><span><MessageSquare size={19} /></span><strong>微信创作工具箱</strong></StudioLink>
+          <div className="studio-breadcrumb"><span>/</span><span>{isWorking ? '工作空间' : '创作中心'}</span><ChevronRight size={14} /><b>{workspaceTools.find(tool => tool.id === route)?.title || (route === 'exports' ? '导出日志' : route === 'resources' ? '模板与指南' : '工具概览')}</b></div>
+          <div className="studio-header-actions">
+            <UpdateAnnouncement blocked={accountPrompt || paymentPrompt || shareOpen || officialAccountPrompt !== null || Boolean(confirmation)} />
+            <Button className="studio-icon-action" type="button" aria-label="关注公众号" title="关注公众号" onClick={() => openOfficialAccountPrompt('header')}><BellRing size={17} /></Button>
+            <RewardHeaderButton onClick={() => setShareOpen(true)} />
+            <Button className="account-trigger" type="button" aria-label={`账户：${accountSession?.user.display_name ?? '未登录'}，${unlimited ? '会员不限次' : `剩余 ${visibleQuota.total_remaining} 次`}`} onClick={() => { setAccountError(''); setAccountPrompt(true) }}><UserRound size={15} /><span>{accountSession ? accountSession.user.display_name : '登录'}</span><small>{unlimited ? '会员' : `${visibleQuota.total_remaining} 次`}</small></Button>
+          </div>
+        </header>
+        <div className="studio-layout">
+          <aside className="studio-sidebar" aria-label="工作空间导航">
+            <StudioLink route="home" onNavigate={navigate} aria-label="工具概览" title="工具概览" className={`studio-overview-link ${route === 'home' ? 'is-active' : ''}`} aria-current={route === 'home' ? 'page' : undefined}><LayoutGrid size={17} /><span>工具概览</span></StudioLink>
+            <div className="studio-nav-label">创作工具 <span>07</span></div>
+            <nav className="studio-tool-nav" aria-label="微信创作工具箱">{workspaceTools.map(tool => <StudioLink key={tool.id} route={tool.id} onNavigate={navigate} className={route === tool.id ? 'is-active' : ''} aria-label={tool.title} title={tool.title} aria-current={route === tool.id ? 'page' : undefined}><tool.icon size={17} /><span>{tool.title}</span>{tool.id === 'batch' && <small>批量</small>}</StudioLink>)}</nav>
+            <StudioLink route="exports" onNavigate={navigate} aria-label="导出日志" title="导出日志" className={`studio-overview-link ${route === 'exports' ? 'is-active' : ''}`} aria-current={route === 'exports' ? 'page' : undefined}><History size={17} /><span>导出日志</span></StudioLink>
+            <div className="studio-sidebar-bottom">
+              <StudioLink route="resources" onNavigate={navigate} aria-label="模板与指南" title="模板与指南" className={`studio-overview-link ${route === 'resources' ? 'is-active' : ''}`} aria-current={route === 'resources' ? 'page' : undefined}><BookOpen size={17} /> 模板与指南</StudioLink>
+              <Button variant="outline" className="studio-quota-card" type="button" onClick={() => { setAccountError(''); setAccountPrompt(true) }}><span>{unlimited ? '会员导出权益' : '可用导出额度'} <ArrowRight size={14} /></span><strong>{unlimited ? '不限次' : visibleQuota.total_remaining}{!unlimited && <small> 次</small>}</strong><p>{unlimited ? '次数包与奖励余额保留' : accountSession ? '查看账户与额度明细' : '每日免费额度 · 登录领取奖励'}</p></Button>
+              <p className="studio-sidebar-note"><ShieldCheck size={13} /> 本地创作 · 隐私优先</p>
             </div>
-          )}
-          <button className="official-account-trigger" type="button" aria-label="关注公众号" onClick={() => openOfficialAccountPrompt('header')}>
-            <BellRing size={15} /><span>关注公众号</span>
-          </button>
-          <RewardHeaderButton onClick={() => setShareOpen(true)} />
-          <button className="account-trigger" type="button" aria-label={`账户：${accountSession?.user.display_name ?? '未登录'}，剩余 ${visibleQuota.total_remaining} 次`} onClick={() => { setAccountError(''); setAccountPrompt(true) }}>
-            <UserRound size={15} />
-            <span>{accountSession ? accountSession.user.display_name : '登录'}</span>
-            <small>{visibleQuota.total_remaining} 次</small>
-          </button>
-        </div>
-      </header>
-
-      <RewardPromotion session={accountSession} refreshKey={`${accountPrompt}:${shareOpen}`} onShare={() => setShareOpen(true)} onAccount={() => { setAccountError(''); setAccountPrompt(true); }} />
-
-      <nav className="wechat-tool-dock" aria-label="微信创作工具箱">
-        <button className={activeTool === 'chat' ? 'is-active' : ''} type="button" onClick={() => setActiveTool('chat')}>
-          <MessageSquare size={18} /><span><strong>聊天生成器</strong><small>对话、群聊与长截图</small></span>
-        </button>
-        <button className={activeTool === 'moments' ? 'is-active' : ''} type="button" onClick={() => setActiveTool('moments')}>
-          <ImageIcon size={18} /><span><strong>朋友圈生成器</strong><small>图文、点赞与评论</small></span>
-        </button>
-        <button className={activeTool === 'payment' ? 'is-active' : ''} type="button" onClick={() => setActiveTool('payment')}><CircleDollarSign size={17} /><span><strong>支付与转账</strong><small>结果与详情页面</small></span></button>
-        <button className={activeTool === 'redpacket' ? 'is-active' : ''} type="button" onClick={() => setActiveTool('redpacket')}><Gift size={17} /><span><strong>红包详情</strong><small>封面与领取结果</small></span></button>
-        <button className={activeTool === 'profile' ? 'is-active' : ''} type="button" onClick={() => setActiveTool('profile')}><UserRound size={17} /><span><strong>个人资料</strong><small>资料与名片页面</small></span></button>
-        <button className={activeTool === 'group' ? 'is-active' : ''} type="button" onClick={() => setActiveTool('group')}><UsersRound size={17} /><span><strong>群信息</strong><small>成员、名称与公告</small></span></button>
-      </nav>
-
-      <section className="product-intro">
-        <div>
-          <span className="intro-badge"><Sparkles size={14} /> 微信内容创作工具箱</span>
-          <h2>{activeTool === 'chat' ? <>把对话排成一张<br /><em>清晰、自然的聊天截图</em></> : activeTool === 'moments' ? <>把图文排成一条<br /><em>自然、完整的朋友圈</em></> : <>把微信场景做成一张<br /><em>可编辑的创作素材</em></>}</h2>
-          <p>{activeTool === 'chat' ? '支持单聊、群聊、图片、语音、红包和转账消息，可导出高清截图与完整长截图。' : activeTool === 'moments' ? '自由编辑头像、图文、位置、点赞与评论，实时预览并导出高清朋友圈图片。' : '支付、红包、个人资料与群信息页面统一编辑、本地保存，并导出带安全标识的高清模拟界面。'}</p>
-          <div className="intro-actions">
-            <a className="btn btn-primary" href={activeTool === 'chat' ? '#editor' : activeTool === 'moments' ? '#moments-editor' : '#scene-editor'}><Zap size={16} /> 立即开始制作</a>
-            {activeTool === 'chat' && <a className="btn btn-outline" href="#templates">浏览对话模板</a>}
-            <button className="btn btn-outline" type="button" onClick={handleShare}>
-              <Share2 size={16} /> 分享工具
-            </button>
+          </aside>
+          <div className="studio-stage">
+            {route === 'exports' && <ExportLogPage onNavigate={navigate} />}
+            {route === 'home' && <div className="studio-page-scroll"><ToolHome onNavigate={navigate} hasDraft={hasMessages} promotion={<RewardPromotion session={accountSession} refreshKey={`${accountPrompt}:${shareOpen}`} onShare={() => setShareOpen(true)} onAccount={() => { setAccountError(''); setAccountPrompt(true); }} />} /></div>}
+            {route === 'resources' && <main className="studio-page-scroll studio-resources"><StudioLink route="home" onNavigate={navigate} className="studio-back-link"><ArrowLeft size={15} /> 返回工具概览</StudioLink><h1>模板与使用指南</h1><p className="studio-page-description">挑选一个示例，在独立工作页中继续编辑。</p><GrowthContent onUseTemplate={handleUseTemplate} onOpenEditor={() => { setChatSection('content'); navigate('chat'); }} /><footer className="analytics-note">创作内容和图片在本地处理；主动分享同款时，对话文字会写入分享链接。账号服务保存邮箱、验证和额度 / 邀请记录，访问统计使用匿名标识。</footer></main>}
+            {isWorking && <h1 className="studio-work-title sr-only">{workspaceTools.find(tool => tool.id === activeTool)?.title}</h1>}
+            <div className="studio-tool-page" hidden={route !== 'batch'}><BatchStudio currentChat={{ users, messages, settings, selfId }} remaining={visibleQuota.total_remaining} unlimited={unlimited} onDebit={debitBatchExport} onComplete={id => {
+              if (batchOwners.current.get(id) !== 'guest') completeExport(id);
+              void trackProductEvent('image_exported', { capture_mode: 'standard', tool: 'batch' });
+            }} /></div>
+            <div className="studio-tool-page" hidden={route !== 'chat'} id="editor" ref={editorRef}>
+              <WorkspacePanels previewTitle="聊天效果预览" previewDescription="可滚动查看消息 · 导出宽度 1125px" preview={<PhonePreview users={users} messages={messages} settings={settings} selfId={selfId} phoneRef={phoneRef} onUpdateMessage={handleUpdateMessage} />}
+                previewActions={<div className="chat-export-actions"><div className="chat-export-summary"><span>{messages.length} 条消息 · {users.length} 个角色</span><span>{unlimited ? '会员不限次' : `剩余 ${visibleQuota.total_remaining} 次`}</span></div><Button type="button" className="btn btn-primary chat-export-primary" disabled={!hasMessages} onClick={handleGenerateImage}><Download size={16} /> 生成图片</Button><div className="chat-export-secondary"><Button type="button" className="btn btn-outline" disabled={!hasMessages} onClick={handleGenerateLongImage}><ImageIcon size={15} /> 长截图</Button><Button type="button" className="btn btn-outline" disabled={!hasMessages} onClick={handleCopyImage}><Copy size={15} /> 复制</Button><Button type="button" className="btn btn-outline" disabled={!hasMessages} onClick={handleShareSame}><Share2 size={15} /> 同款链接</Button></div></div>}>
+                <div className="chat-project-bar"><label><span>当前对话</span><Input aria-label="工作页项目名称" placeholder="未命名对话" value={activeProjectName} maxLength={48} onChange={event => setActiveProjectName(event.target.value)} /></label><span className={`studio-save-state is-${saveState}`}>{saveState === 'saved' ? <><Check size={13} /> 已自动保存</> : saveState === 'saving' ? '保存中…' : saveState === 'error' ? '本地保存失败' : '仅保存在本机'}</span></div>
+                <Tabs value={chatSection} onValueChange={value => setChatSection(value as typeof chatSection)}>
+                <TabsList variant="line" className="studio-section-tabs" aria-label="聊天编辑面板">{([{ id: 'content', label: '聊天内容', icon: MessageSquare }, { id: 'people', label: '角色头像', icon: UsersRound }, { id: 'settings', label: '手机样式', icon: Settings2 }, { id: 'projects', label: '本地草稿', icon: FolderOpen }] as const).map(item => <TabsTrigger key={item.id} value={item.id}><item.icon size={15} />{item.label}</TabsTrigger>)}</TabsList>
+                <TabsContent className="chat-section-content" value="content" keepMounted>
+                  <ImportPanel text={importText} onTextChange={setImportText} onImport={handleImport} />
+                  {users.length > 0 && <MessageEditor users={users} selfId={selfId} onAddMessage={handleAddMessage} />}
+                  {!hasMessages && <div className="workspace-getting-started"><span>第一次使用？</span><p>按“姓名：消息”逐行输入，点击解析即可预览。也可以从模板开始。</p><StudioLink route="resources" onNavigate={navigate}>选择对话模板 <ArrowRight size={14} /></StudioLink></div>}
+                </TabsContent>
+                <TabsContent className="chat-section-content" value="people" keepMounted>{users.length ? <UserAvatarManager users={users} selfId={selfId} onUpdateAvatar={handleUpdateAvatar} onRemoveAvatar={handleRemoveAvatar} onSetSelf={setSelfId} /> : <div className="workspace-empty"><UsersRound size={30} /><h2>先添加聊天角色</h2><p>导入对话后，即可在这里设置头像和“我”的身份。</p><Button type="button" className="btn btn-outline" onClick={() => setChatSection('content')}>编辑聊天内容</Button></div>}</TabsContent>
+                <TabsContent className="chat-section-content" value="settings" keepMounted><SettingsPanel settings={settings} onSettingsChange={setSettings} /></TabsContent>
+                <TabsContent className="chat-section-content" value="projects" keepMounted><ProjectPanel projects={projects} activeProjectId={activeProjectId} activeProjectName={activeProjectName} saveState={saveState} storageAvailable={storageAvailable} onCreate={() => { void handleCreateProject().then(() => setChatSection('content')); }} onOpen={project => { void handleOpenProject(project).then(() => setChatSection('content')); }} onRename={setActiveProjectName} onDuplicate={project => { void handleDuplicateProject(project); }} onDelete={project => { void handleDeleteProject(project); }} />{!projects.length && <p className="workspace-muted">暂无本地草稿。开始编辑后会自动保存到当前浏览器。</p>}</TabsContent>
+                </Tabs>
+              </WorkspacePanels>
+            </div>
+            <div className="studio-tool-page" hidden={route !== 'moments'}><MomentsEditor onToast={showToast} onBeforeExport={authorizeExport} onExportSuccess={ticket => {
+              completeExport(ticket); void trackProductEvent('image_exported', { capture_mode: 'standard', tool: 'moments' }); promptAfterExport();
+            }} /></div>
+            {(['payment', 'redpacket', 'profile', 'group'] as const).map(kind => <div className="studio-tool-page" key={kind} hidden={route !== kind}><WechatSceneEditor kind={kind} onToast={showToast} onBeforeExport={authorizeExport} onExportSuccess={ticket => {
+              completeExport(ticket); void trackProductEvent('image_exported', { capture_mode: 'standard', tool: kind }); promptAfterExport();
+            }} /></div>)}
           </div>
         </div>
-        <div className="intro-trust">
-          <span><ShieldCheck size={18} /> 对话和头像仅在本地处理</span>
-          <span>无弹窗广告</span>
-          <span>游客每日免费 10 次</span>
-        </div>
-      </section>
+      </div>
 
-      {activeTool === 'chat' && <ProjectPanel
-        projects={projects}
-        activeProjectId={activeProjectId}
-        activeProjectName={activeProjectName}
-        saveState={saveState}
-        storageAvailable={storageAvailable}
-        onCreate={() => { void handleCreateProject(); }}
-        onOpen={project => { void handleOpenProject(project); }}
-        onRename={setActiveProjectName}
-        onDuplicate={project => { void handleDuplicateProject(project); }}
-        onDelete={project => { void handleDeleteProject(project); }}
-      />}
-
-      {activeTool === 'chat' && <main className="app-main" id="editor" ref={editorRef}>
-        <div className="app-left">
-          <ImportPanel text={importText} onTextChange={setImportText} onImport={handleImport} />
-          {users.length > 0 && (
-            <UserAvatarManager users={users} selfId={selfId} onUpdateAvatar={handleUpdateAvatar} onRemoveAvatar={handleRemoveAvatar} onSetSelf={setSelfId} />
-          )}
-          {users.length > 0 && (
-            <MessageEditor users={users} selfId={selfId} onAddMessage={handleAddMessage} />
-          )}
-          {hasMessages && (
-            <SettingsPanel settings={settings} onSettingsChange={setSettings} />
-          )}
-        </div>
-        {hasMessages && (
-          <PhonePreview users={users} messages={messages} settings={settings} selfId={selfId} phoneRef={phoneRef} onUpdateMessage={handleUpdateMessage} />
-        )}
-      </main>}
-
-      {activeTool === 'moments' && <MomentsEditor onToast={showToast} onBeforeExport={authorizeExport} onExportSuccess={ticket => {
-        completeExport(ticket);
-        void trackProductEvent('image_exported', { capture_mode: 'standard', tool: 'moments' });
-        promptAfterExport();
-      }} />}
-      {(['payment', 'redpacket', 'profile', 'group'] as const).includes(activeTool as 'payment' | 'redpacket' | 'profile' | 'group') && (
-        <WechatSceneEditor key={activeTool} kind={activeTool as 'payment' | 'redpacket' | 'profile' | 'group'} onToast={showToast} onBeforeExport={authorizeExport} onExportSuccess={ticket => {
-          completeExport(ticket);
-          void trackProductEvent('image_exported', { capture_mode: 'standard', tool: activeTool });
-          promptAfterExport();
-        }} />
-      )}
-
-      {activeTool === 'chat' && <GrowthContent onUseTemplate={handleUseTemplate} />}
-
-      <footer className="analytics-note">
-        创作内容和图片在本地处理；主动分享同款时，对话文字会写入分享链接。账号服务保存邮箱、验证码验证记录及额度 / 邀请记录，访问统计使用匿名标识。
-      </footer>
-
+      <ConfirmDialog open={Boolean(confirmation)} title={confirmation?.title ?? ""} description={confirmation?.description ?? ""} confirmText={confirmation?.confirmText} onOpenChange={open => { if (!open) resolveConfirmation(false); }} onConfirm={() => resolveConfirmation(true)} />
       {toast && <div className="toast-msg">{toast}</div>}
       <OfficialAccountDialog
         open={officialAccountPrompt !== null}
@@ -960,7 +866,9 @@ function App() {
         onRegister={handleRegister}
         onVerify={handleVerify}
         onLogout={handleLogout}
+        onRecharge={() => { setAccountPrompt(false); setPaymentPrompt(true); }}
       />
+      {paymentPrompt && <PaymentDialog key={accountSession?.user.id || 'guest'} session={accountSession} onClose={() => setPaymentPrompt(false)} onAccount={() => { setPaymentPrompt(false); setAccountError(''); setAccountPrompt(true); }} onQuota={(userId, quota) => { setAccountSession(current => current?.user.id === userId ? { ...current, quota } : current); if (accountSession?.user.id === userId) setVisibleQuota(quota); }} />}
       {shareOpen && <ShareDialog session={accountSession} onClose={closeShare} onAccount={() => { setShareOpen(false); setAccountError(''); setAccountPrompt(true); }} />}
     </>
   );

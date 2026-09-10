@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { Users, Upload, X, UserCheck } from 'lucide-react';
 import { getDefaultAvatar } from '@/lib/parser';
 import type { ChatUser } from '@/types';
+import { Button } from './ui/button';
 
 interface UserAvatarManagerProps {
   users: ChatUser[];
@@ -37,20 +38,20 @@ function AvatarCard({ user, index, isSelf, onUpdateAvatar, onRemoveAvatar, onSet
     <div className="avatar-card">
       <div className="avatar-img-wrap">
         <img src={avatarSrc} alt={user.name} />
-        <div className="avatar-overlay" onClick={() => fileRef.current?.click()}>
+        <Button variant="ghost" size="icon" type="button" className="avatar-overlay" style={{ width: '100%', height: '100%', padding: 0, border: 0, borderRadius: 16, background: 'rgba(0,0,0,.35)' }} aria-label={`上传${user.name}的头像`} onClick={() => fileRef.current?.click()}>
           <Upload size={20} color="#fff" />
-        </div>
+        </Button>
         {user.avatar && (
-          <button className="avatar-remove" onClick={() => onRemoveAvatar(user.id)}>
+          <Button variant="destructive" size="icon" type="button" className="avatar-remove" style={{ width: 20, height: 20, padding: 0, borderRadius: '50%' }} aria-label={`移除${user.name}的自定义头像`} onClick={() => onRemoveAvatar(user.id)}>
             <X size={12} />
-          </button>
+          </Button>
         )}
         <input ref={fileRef} type="file" accept="image/*" hidden onChange={handleUpload} />
       </div>
       <span className="avatar-name">{user.name}</span>
       {isSelf
         ? <span className="avatar-tag">自己</span>
-        : <button className="avatar-set-self" onClick={() => onSetSelf(user.id)}><UserCheck size={12} /> 设为自己</button>
+        : <Button variant="outline" size="sm" type="button" className="avatar-set-self" onClick={() => onSetSelf(user.id)}><UserCheck size={12} /> 设为自己</Button>
       }
     </div>
   );
@@ -66,7 +67,7 @@ export function UserAvatarManager({ users, selfId, onUpdateAvatar, onRemoveAvata
         <span className="s-card-badge">{users.length} 个用户</span>
       </div>
       <div className="s-card-body">
-        <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 14 }}>鼠标悬停头像可上传自定义图片</p>
+        <p style={{ fontSize: 12, color: 'var(--control-muted)', marginBottom: 14 }}>点击头像可上传自定义图片</p>
         <div className="avatar-grid">
           {users.map((user, index) => (
             <AvatarCard

@@ -6,6 +6,17 @@ const apiRoot = import.meta.env.VITE_ACCOUNT_API_ENDPOINT ||
 
 const tokenStorageKey = 'wechat-dialog-generator:account-token'
 const guestUsageStorageKey = 'wechat-dialog-generator:guest-export-usage'
+const authenticatedCredentials = new Map<string, string>()
+export type ExportIdentity = { userId: string | null; credential: string }
+export function captureExportIdentity(session: AccountSession | null): ExportIdentity {
+  return { userId: session?.user.id ?? null, credential: session ? authenticatedCredentials.get(session.user.id) ?? '\u0000' : '' }
+}
+export function isExportIdentityCurrent(identity: ExportIdentity) {
+  return token() === identity.credential
+}
+export function assertExportIdentity(identity: ExportIdentity) {
+  if (!isExportIdentityCurrent(identity)) throw new AccountApiError(409, 'account_changed', '登录状态已变化，操作已停止。请刷新账户状态后，在原账号重试。')
+}
 
 export interface AccountUser {
   id: string
@@ -20,6 +31,8 @@ export interface ExportQuota {
   daily_used: number
   daily_remaining: number
   bonus_remaining: number
+  paid_remaining?: number
+  membership?: { active: boolean; expires_at: string | null }
   total_remaining: number
   resets_at: string
 }
@@ -48,17 +61,18 @@ function token() {
   }
 }
 
-function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+function request<T>(path: string, options: RequestInit = {}, credential?: string): Promise<T> {
   const actions: Record<string, string> = { '/auth/register': 'register', '/auth/login': 'login', '/auth/email/verify': 'bind', '/auth/password/reset': 'reset', '/growth/invite': 'invite_create', '/growth/revoke': 'invite_revoke', '/growth/visit': 'invite_visit', '/quota/complete': 'export_complete' }
   let action = actions[path]
   if (path === '/auth/email-code') {
     const purpose = JSON.parse(String(options.body || '{}')).purpose
     if (['register', 'bind', 'reset'].includes(purpose)) action = `code_${purpose}`
   }
-  return action ? measureGrowthRequest(action, () => rawRequest<T>(path, options)) : rawRequest<T>(path, options)
+  return action ? measureGrowthRequest(action, () => rawRequest<T>(path, options, credential)) : rawRequest<T>(path, options, credential)
 }
-async function rawRequest<T>(path: string, options: RequestInit = {}) {
-  const sessionToken = token()
+async function rawRequest<T>(path: string, options: RequestInit = {}, credential?: string) {
+  if (credential !== undefined) assertExportIdentity({ userId: null, credential })
+  const sessionToken = credential ?? token()
   const response = await fetch(`${apiRoot}${path}`, {
     signal: AbortSignal.timeout(20000),
     ...options,
@@ -91,6 +105,7 @@ export async function registerAccount(email: string, password: string, displayNa
     body: JSON.stringify({ email, password, display_name: displayName, challenge_id, code, invite_code: pendingInvite() }),
   })
   saveToken(result.token)
+  authenticatedCredentials.set(result.user.id, result.token)
   return { user: result.user, quota: result.quota }
 }
 
@@ -100,16 +115,21 @@ export async function loginAccount(email: string, password: string) {
     body: JSON.stringify({ email, password }),
   })
   saveToken(result.token)
+  authenticatedCredentials.set(result.user.id, result.token)
   return { user: result.user, quota: result.quota }
 }
 
 export async function restoreAccount() {
-  if (!token()) return null
+  const credential = token()
+  if (!credential) return null
   try {
-    return await request<AccountSession>('/auth/me')
+    const session = await request<AccountSession>('/auth/me', {}, credential)
+    if (token() !== credential) return null
+    authenticatedCredentials.set(session.user.id, credential)
+    return session
   } catch (error) {
     if (error instanceof AccountApiError && error.status === 401) {
-      localStorage.removeItem(tokenStorageKey)
+      if (token() === credential) localStorage.removeItem(tokenStorageKey)
       return null
     }
     throw error
@@ -124,16 +144,26 @@ export async function logoutAccount() {
   }
 }
 
-export async function consumeAccountExport() {
-  const action_id = crypto.randomUUID()
+export async function consumeAccountExport(action_id: string = crypto.randomUUID(), identity?: ExportIdentity) {
+  if (identity) assertExportIdentity(identity)
   const result = await request<{ consumed: boolean; source: string; quota: ExportQuota }>('/quota/consume', {
     method: 'POST',
     body: JSON.stringify({ action_id }),
-  })
+  }, identity?.credential)
   return { quota: result.quota, action_id }
 }
 
 const post = <T>(path: string, body: object) => request<T>(path, { method: 'POST', body: JSON.stringify(body) })
+export type PaymentProduct = { id: string; amount_fen: number; credits: number; subject: string; kind?: 'credits' | 'membership'; duration_days?: number; regular_amount_fen?: number; purchasable?: boolean }
+export type PaymentCampaign = { active: boolean; starts_at: string; ends_at: string; server_now: string }
+export type PaymentState = 'pending' | 'paid' | 'closed' | 'refunding' | 'refunded'
+export type PaymentOrder = { id: string; product_id: string; amount_fen: number; credits: number; state: PaymentState; created_at: string; paid_at: string | null; kind?: 'credits' | 'membership'; duration_days?: number; subject?: string }
+export const getPaymentProducts = () => request<{ available: boolean; products: PaymentProduct[]; campaign?: PaymentCampaign | null }>('/payments/products')
+const paymentPost = <T>(path: string, body: object, identity?: ExportIdentity) => request<T>(path, { method: 'POST', body: JSON.stringify(body) }, identity?.credential)
+export const getPaymentOrders = (identity?: ExportIdentity) => request<{ orders: PaymentOrder[] }>('/payments/orders', {}, identity?.credential)
+export const createPaymentOrder = (product_id: string, request_id: string, expected_amount_fen?: number, identity?: ExportIdentity) => paymentPost<{ order_id: string; state: PaymentState; checkout_url?: string }>('/payments/orders', { product_id, request_id, ...(expected_amount_fen === undefined ? {} : { expected_amount_fen }) }, identity)
+export const refreshPaymentOrder = (order_id: string, identity?: ExportIdentity) => paymentPost<{ order_id: string; state: PaymentState; quota: ExportQuota }>('/payments/refresh', { order_id }, identity)
+export const resumePaymentOrder = (order_id: string, identity?: ExportIdentity) => paymentPost<{ order_id: string; state: PaymentState; checkout_url?: string }>('/payments/checkout', { order_id }, identity)
 export const requestEmailCode = (email: string, purpose: 'register' | 'bind' | 'reset') => post<{ challenge_id: string; retry_after: number; message: string }>('/auth/email-code', { email, purpose })
 export const verifyAccountEmail = (email: string, challenge_id: string, code: string) => post<AccountSession & { granted: number }>('/auth/email/verify', { email, challenge_id, code })
 export const resetAccountPassword = (email: string, password: string, challenge_id: string, code: string) => post<{ ok: boolean }>('/auth/password/reset', { email, password, challenge_id, code })
@@ -144,7 +174,10 @@ export const getGrowth = () => request<Growth>('/growth')
 export const createInvite = () => post<{ code: string }>('/growth/invite', {})
 export const revokeInvite = (code: string) => post('/growth/revoke', { code })
 export const visitInvite = (code: string) => post('/growth/visit', { code })
-export const completeAccountExport = (action_id: string) => post('/quota/complete', { action_id })
+export const completeAccountExport = (action_id: string, identity?: ExportIdentity) => {
+  if (identity) assertExportIdentity(identity)
+  return request('/quota/complete', { method: 'POST', body: JSON.stringify({ action_id }) }, identity?.credential)
+}
 export function pendingInvite() {
   try {
     const code = new URL(window.location.href).searchParams.get('invite')

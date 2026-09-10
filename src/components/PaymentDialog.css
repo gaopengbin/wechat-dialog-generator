@@ -1,0 +1,43 @@
+.payment-backdrop { position:fixed; inset:0; z-index:1200; background:#102d1d55; }
+.payment-dialog { position:fixed; z-index:1201; top:50%; left:50%; transform:translate(-50%,-50%); width:min(860px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); display:flex; flex-direction:column; padding:20px; border:1px solid var(--control-input-border); border-radius:12px; background:var(--control-background); color:var(--control-foreground); box-shadow:0 20px 70px #15322133; outline:none; font-size:13px; }
+.payment-dialog header,.payment-dialog footer { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-shrink:0; }
+.payment-dialog h2 { display:flex; align-items:center; gap:8px; margin:0; font-size:19px; }
+.payment-dialog p { line-height:1.65; margin:10px 0; }
+.payment-muted,.payment-dialog small,.payment-dialog footer { color:var(--control-muted); }
+.payment-body { overflow-y:auto; min-height:0; padding:2px; }
+.payment-balance { display:flex; flex-wrap:wrap; align-items:center; gap:12px; background:#f0f8f3; border:1px solid #d9e8de; padding:14px; border-radius:8px; margin:0 0 14px; }
+.payment-balance strong { font-size:25px; color:#087c44; }
+.payment-balance small { font-size:12px; }
+.payment-balance > span:last-child { margin-left:auto; }
+.payment-products { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:14px 0; }
+.payment-products article { border:1px solid #bfd8c8; padding:16px; border-radius:8px; display:flex; flex-direction:column; align-items:flex-start; gap:7px; }
+.payment-products strong { font-size:28px; }
+.payment-products p { margin:0 0 6px; }
+.payment-products button { width:100%; }
+.payment-products .payment-product-featured { border-color:#0b8450; background:#f0faf4; }
+.payment-product-name { display:flex; flex-wrap:wrap; align-items:center; gap:6px; font-weight:650; }
+.payment-product-name small { background:#d8f0e2; color:#12623c; padding:2px 5px; border-radius:4px; font-size:11px; }
+.payment-price { display:flex; flex-direction:column; gap:2px; }
+.payment-price > span { color:var(--control-muted); font-size:12px; }
+.payment-products article > small { margin-bottom:8px; }
+.payment-products button { margin-top:auto; }
+.payment-launch { display:flex; flex-wrap:wrap; gap:5px 14px; padding:12px 14px; margin-top:12px; background:#fff6e8; border:1px solid #eac58c; border-radius:8px; color:#844010; }
+.payment-launch strong { font-size:15px; }
+.payment-launch small { flex-basis:100%; color:#844010; }
+.payment-membership { padding:10px 14px; background:#eef9f2; color:#12623c; border-radius:6px; }
+.payment-day { grid-template-columns:1fr; }
+.payment-day article { max-width:360px; width:100%; }
+.payment-checkout { background:#f0f8f3; padding:12px; border-radius:8px; margin-top:12px; }
+.payment-checkout a { display:inline-flex; align-items:center; gap:8px; color:#086d3c; font-weight:650; text-decoration:underline; text-underline-offset:3px; }
+.payment-checkout a:focus-visible { outline:2px solid #078344; outline-offset:4px; }
+.payment-notice { color:#086d3c; }
+.payment-error { color:#a62e27; background:#fff3f1; padding:10px; border-radius:6px; }
+.payment-orders { margin:20px 0 12px; }
+.payment-orders h3 { display:flex; justify-content:space-between; font-size:14px; }
+.payment-orders h3 span { font-size:12px; font-weight:400; color:var(--control-muted); }
+.payment-orders article { border-top:1px solid var(--control-input-border); padding:12px 0; }
+.payment-orders article > div { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; }
+.payment-orders small,.payment-orders code { display:block; margin-top:6px; font-size:12px; overflow-wrap:anywhere; }
+.payment-orders article .payment-order-actions { justify-content:flex-start; margin-top:9px; }
+.payment-dialog footer { border-top:1px solid var(--control-input-border); padding-top:12px; margin-top:12px; font-size:12px; }
+@media(max-width:520px) { .payment-dialog { padding:16px; } .payment-dialog footer { flex-wrap:wrap; } .payment-balance > span:last-child { flex-basis:100%; margin-left:0; } }

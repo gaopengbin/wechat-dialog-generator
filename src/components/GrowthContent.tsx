@@ -1,3 +1,4 @@
+import { Disclosure } from './ui/controls';
 import {
   ArrowUpRight,
   BookOpen,
@@ -31,13 +32,13 @@ const templates = [
     title: '项目讨论',
     description: '适合产品原型、教学演示和团队场景。',
     content: `**【8月12日 下午14:00】**
-**高鹏彬**：新版演示链接已经更新，大家帮忙看一下
+**小明**：新版演示链接已经更新，大家帮忙看一下
 **小周**：移动端我来检查
 **小李**：我负责核对文案和数据
-**高鹏彬**：[图片]
+**小明**：[图片]
 **小周**：首页在小屏幕上也正常
 **小李**：数据更新时间已经补上了
-**高鹏彬**：收到，晚点统一发布`,
+**小明**：收到，晚点统一发布`,
   },
   {
     id: 'creator-script',
@@ -56,9 +57,10 @@ const templates = [
 
 interface GrowthContentProps {
   onUseTemplate: (content: string, templateId: string) => void;
+  onOpenEditor?: () => void;
 }
 
-export function GrowthContent({ onUseTemplate }: GrowthContentProps) {
+export function GrowthContent({ onUseTemplate, onOpenEditor }: GrowthContentProps) {
   return (
     <section className="growth-content" aria-label="微信聊天截图制作指南">
       <div className="growth-section" id="templates">
@@ -68,7 +70,7 @@ export function GrowthContent({ onUseTemplate }: GrowthContentProps) {
             <h2>从一个好用的示例开始</h2>
             <p>选择模板后仍可自由修改人物、消息、头像和手机状态。</p>
           </div>
-          <a className="text-link" href="#editor">自己输入内容 <ArrowUpRight size={15} /></a>
+          <a className="text-link" href="?tool=chat" onClick={event => { if (onOpenEditor && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); onOpenEditor(); } }}>自己输入内容 <ArrowUpRight size={15} /></a>
         </div>
         <div className="template-grid">
           {templates.map((template) => (
@@ -125,10 +127,10 @@ export function GrowthContent({ onUseTemplate }: GrowthContentProps) {
           </div>
         </div>
         <div className="faq-grid">
-          <details><summary>需要下载软件或注册账号吗？</summary><p>不需要下载软件或强制注册。游客打开页面即可制作，每日可免费导出 10 次；登录后可保存账户额度并领取公众号奖励。</p></details>
-          <details><summary>聊天内容和头像会上传吗？</summary><p>不会。内容解析、头像预览和截图生成均在浏览器本地完成，站点只记录匿名访问、创建和导出事件。</p></details>
-          <details><summary>可以生成多人群聊和长截图吗？</summary><p>可以。导入三位及以上参与者会自动形成群聊标题，也可以导出包含完整对话的长截图。</p></details>
-          <details><summary>生成的图片适合哪些场景？</summary><p>适合内容创作、产品原型、教学演示和剧情分镜。请明确标注模拟内容，避免用于误导、冒充或欺诈。</p></details>
+          <Disclosure title="需要下载软件或注册账号吗？"><p>不需要下载软件或强制注册。游客打开页面即可制作，每日可免费导出 10 次；登录后可保存账户额度并领取公众号奖励。</p></Disclosure>
+          <Disclosure title="聊天内容和头像会上传吗？"><p>不会。内容解析、头像预览和截图生成均在浏览器本地完成，站点只记录匿名访问、创建和导出事件。</p></Disclosure>
+          <Disclosure title="可以生成多人群聊和长截图吗？"><p>可以。导入三位及以上参与者会自动形成群聊标题，也可以导出包含完整对话的长截图。</p></Disclosure>
+          <Disclosure title="生成的图片适合哪些场景？"><p>适合内容创作、产品原型、教学演示和剧情分镜。请明确标注模拟内容，避免用于误导、冒充或欺诈。</p></Disclosure>
         </div>
       </div>
 

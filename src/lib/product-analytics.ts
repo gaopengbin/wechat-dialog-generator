@@ -23,7 +23,7 @@ type EventName = GrowthEvent
   | 'template_used'
 type Properties = Record<string, string>
 
-export type WechatTool = 'chat' | 'moments' | 'payment' | 'redpacket' | 'profile' | 'group'
+export type WechatTool = 'chat' | 'moments' | 'payment' | 'redpacket' | 'profile' | 'group' | 'batch'
 
 function identifier(storage: Storage, key: string) {
   const existing = storage.getItem(key)

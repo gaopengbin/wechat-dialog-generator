@@ -1,0 +1,36 @@
+.export-log-page { color:var(--color-foreground); padding:24px; }
+.export-log-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; }
+.export-log-heading h1 { display:flex; align-items:center; gap:9px; margin:0; font-size:22px; font-weight:650; }
+.export-log-heading p { margin:6px 0 0; color:#59655e; font-size:13px; }
+.export-log-actions { display:flex; gap:8px; flex-shrink:0; }
+.export-log-notice { background:#f1f8f3; color:#476151; border:1px solid #dce9e0; padding:10px 12px; border-radius:8px; font-size:12px; line-height:1.8; margin:16px 0; }
+.export-log-filters { display:grid; grid-template-columns:minmax(180px,1fr) repeat(3,minmax(125px,180px)); gap:10px; }
+.export-log-filters > * { min-width:0; width:100%; }
+.export-log-summary { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; margin:14px 0 8px; color:#59655e; font-size:12px; }
+.export-log-table { border:1px solid #dce5df; border-radius:8px; background:#fff; }
+.export-log-row { display:grid; grid-template-columns:160px minmax(150px,1fr) 110px minmax(130px,.6fr) 105px; align-items:center; gap:14px; padding:12px; border-bottom:1px solid #e6ece8; font-size:13px; }
+.export-log-row:last-child { border-bottom:0; }
+.export-log-labels { background:#f5f9f6; color:#52675b; font-size:12px; border-radius:8px 8px 0 0; }
+.export-log-row > * { min-width:0; overflow-wrap:anywhere; }
+.export-log-row time { font-size:12px; color:#59655e; font-variant-numeric:tabular-nums; }
+.export-log-row strong { display:block; font-weight:550; }
+.export-log-row small,.export-log-filename { display:block; font-size:12px; color:#59655e; margin-top:4px; line-height:1.6; overflow-wrap:anywhere; }
+.export-log-status { display:inline-block; padding:3px 7px; border-radius:5px; color:#176b49; background:#edf8f1; font-size:12px; }
+.export-log-status.is-failed { color:#a62e27; background:#fff1ed; }
+.export-log-status.is-pending,.export-log-status.is-cancelled { color:#675c3c; background:#f7f4e9; }
+.export-log-error { color:#a62e27; font-size:13px; }
+.export-log-empty { padding:55px 20px; text-align:center; color:#59655e; }
+.export-log-empty svg { margin:auto; color:#38784e; }
+.export-log-empty h2 { font-size:17px; color:#263d30; margin:12px 0 8px; }
+.export-log-empty p { font-size:13px; line-height:1.8; }
+.export-log-pagination { display:flex; justify-content:flex-end; align-items:center; gap:10px; margin:14px 0; font-size:12px; color:#59655e; }
+@media(max-width:1100px) { .export-log-row { grid-template-columns:140px minmax(100px,1fr) 95px minmax(100px,.6fr) 90px; gap:8px; padding:10px; } }
+@media(max-width:850px) {
+  .export-log-page { padding:16px; }
+  .export-log-heading { flex-wrap:wrap; }
+  .export-log-filters { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .export-log-row { grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px; padding:14px; }
+  .export-log-labels { display:none; }
+  .export-log-row time { grid-column:1/-1; }
+  .export-log-row > :last-child { justify-self:end; }
+}

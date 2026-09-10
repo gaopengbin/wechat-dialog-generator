@@ -1,5 +1,8 @@
+import { Button } from './ui/button';
+import { Textarea } from './ui/textarea';
+import { Disclosure } from './ui/controls';
 import { useRef, useState } from 'react';
-import { FileUp, FileText, Trash2, Copy, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { FileUp, FileText, Trash2, Copy, Check, Sparkles } from 'lucide-react';
 import { EXAMPLE_TEXT } from '@/lib/parser';
 
 const DOUBAO_PROMPT = `请帮我生成一段微信群聊天记录，要求如下：
@@ -36,7 +39,6 @@ interface ImportPanelProps {
 
 export function ImportPanel({ text, onTextChange, onImport }: ImportPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [promptOpen, setPromptOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const handleCopyPrompt = async () => {
@@ -61,8 +63,9 @@ export function ImportPanel({ text, onTextChange, onImport }: ImportPanelProps) 
       <div className="s-card-header">
         <h2><FileText size={20} /> 导入聊天记录</h2>
       </div>
-      <div className="s-card-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div className="format-tip">
+      <div className="s-card-body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className="import-help-row"><Disclosure className="workspace-format-help" title={<>输入格式说明 <small>姓名：消息内容</small></>}>
+          <div className="format-tip">
           <strong>支持的格式：</strong><br />
           文字消息：<code>**用户名**：消息内容</code><br />
           图片消息：<code>**用户名**：[图片]</code> 或 <code>**用户名**：[图片]URL</code><br />
@@ -71,49 +74,45 @@ export function ImportPanel({ text, onTextChange, onImport }: ImportPanelProps) 
           语音消息：<code>**用户名**：[语音]秒数</code>，转文字：<code>**用户名**：[语音]秒数:内容</code><br />
           时间节点：<code>**【3月1日 14:32】**</code>
           <div className="tip-muted">标题行(#)、引用行(&gt;)、空行自动跳过。第一个出现的用户默认为"自己"。图片不带URL时可在预览中点击上传本地图片。</div>
-        </div>
+          </div>
+        </Disclosure>
 
         {/* 豆包Prompt区域 */}
-        <div className="prompt-block">
-          <button className="prompt-toggle" onClick={() => setPromptOpen(v => !v)}>
-            <span>🤖 用豆包 / AI 生成聊天记录</span>
-            {promptOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-          </button>
-          {promptOpen && (
+        <Disclosure className="prompt-block" title={<span className="prompt-title"><Sparkles size={14} /> 用豆包 / AI 生成聊天记录</span>}>
             <div className="prompt-body">
               <div className="prompt-desc">复制以下 Prompt 发给豆包，将返回内容粘贴到下方文本框即可：</div>
               <pre className="prompt-pre">{DOUBAO_PROMPT}</pre>
-              <button className="btn btn-outline btn-sm" onClick={handleCopyPrompt}>
+              <Button variant="outline" className="btn btn-outline btn-sm" onClick={handleCopyPrompt}>
                 {copied ? <><Check size={14} /> 已复制</> : <><Copy size={14} /> 复制 Prompt</>}
-              </button>
+              </Button>
             </div>
-          )}
-        </div>
+        </Disclosure></div>
 
         <div style={{ display: 'flex', gap: 8 }}>
           <input ref={fileInputRef} type="file" accept=".md,.txt,.markdown" hidden onChange={handleFileLoad} />
-          <button className="btn btn-outline btn-sm" onClick={() => fileInputRef.current?.click()}>
+          <Button variant="outline" className="btn btn-outline btn-sm" onClick={() => fileInputRef.current?.click()}>
             <FileUp size={15} /> 导入文件
-          </button>
-          <button className="btn btn-outline btn-sm" onClick={() => onTextChange(EXAMPLE_TEXT)}>
+          </Button>
+          <Button variant="outline" className="btn btn-outline btn-sm" onClick={() => onTextChange(EXAMPLE_TEXT)}>
             <FileText size={15} /> 加载示例
-          </button>
+          </Button>
         </div>
 
-        <textarea
+        <Textarea
           className="s-textarea"
+          aria-label="聊天记录文本"
           value={text}
           onChange={(e) => onTextChange(e.target.value)}
           placeholder="在此粘贴聊天记录文本，或点击上方按钮导入文件..."
         />
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button className="btn btn-primary" onClick={onImport} disabled={!text.trim()}>
+          <Button className="btn btn-primary" onClick={onImport} disabled={!text.trim()}>
             解析并导入
-          </button>
-          <button className="btn btn-outline btn-sm" onClick={() => onTextChange('')} disabled={!text}>
+          </Button>
+          <Button variant="outline" className="btn btn-outline btn-sm" onClick={() => onTextChange('')} disabled={!text}>
             <Trash2 size={15} /> 清空
-          </button>
+          </Button>
         </div>
       </div>
     </div>

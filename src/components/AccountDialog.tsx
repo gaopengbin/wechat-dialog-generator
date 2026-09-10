@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { LogOut, ShieldCheck, UserRound, X } from 'lucide-react'
+import { CreditCard, LogOut, ShieldCheck, UserRound, X } from 'lucide-react'
 import { AccountApiError, getRewards, requestEmailCode, resetAccountPassword, type AccountSession, type Reward } from '@/lib/account-api'
 import { emailValidationMessage } from '@/lib/email-validation'
 import { trackGrowthEvent } from '@/lib/growth-analytics'
+import { Button } from './ui/button'
 
 interface AccountDialogProps {
   open: boolean
@@ -14,9 +15,10 @@ interface AccountDialogProps {
   onRegister: (email: string, password: string, displayName: string, challengeId: string, code: string) => Promise<void>
   onVerify: (email: string, challengeId: string, code: string) => Promise<void>
   onLogout: () => Promise<void>
+  onRecharge: () => void
 }
 
-export function AccountDialog({ open, session, busy, error, onClose: closeParent, onLogin, onRegister, onVerify, onLogout }: AccountDialogProps) {
+export function AccountDialog({ open, session, busy, error, onClose: closeParent, onLogin, onRegister, onVerify, onLogout, onRecharge }: AccountDialogProps) {
   const [mode, setMode] = useState<'login' | 'register' | 'reset'>('login')
   const [email, setEmail] = useState<string | null>(null)
   const [emailError, setEmailError] = useState('')
@@ -29,6 +31,7 @@ export function AccountDialog({ open, session, busy, error, onClose: closeParent
   const [cooldown, setCooldown] = useState(0)
   const [notice, setNotice] = useState('')
   const [localError, setLocalError] = useState('')
+  const [showParentError, setShowParentError] = useState(true)
   const [rewards, setRewards] = useState<Reward[]>([])
   const panel = useRef<HTMLElement>(null)
   const locked = busy || sending
@@ -74,7 +77,7 @@ export function AccountDialog({ open, session, busy, error, onClose: closeParent
   }, [open, session])
   if (!open) return null
 
-  const changeMode = (next: typeof mode) => { if (next !== mode) trackGrowthEvent('account_form_closed', { mode: formMode }); setMode(next); setPassword(''); setChallenge(''); setCode(''); setNotice(''); setLocalError(''); setEmailError('') }
+  const changeMode = (next: typeof mode) => { if (next !== mode) trackGrowthEvent('account_form_closed', { mode: formMode }); setMode(next); setPassword(''); setChallenge(''); setCode(''); setCooldown(0); setNotice(''); setLocalError(''); setEmailError(''); setShowParentError(false) }
   const validateEmail = () => {
     const message = emailValidationMessage(targetEmail)
     setEmailError(message)
@@ -83,7 +86,7 @@ export function AccountDialog({ open, session, busy, error, onClose: closeParent
   }
   const sendCode = async () => {
     if (!validateEmail()) return
-    setSending(true); setLocalError(''); setNotice('')
+    setSending(true); setLocalError(''); setNotice(''); setShowParentError(false)
     try { const result = await requestEmailCode(targetEmail.trim(), purpose); setChallenge(result.challenge_id); setCooldown(result.retry_after); setNotice(result.message) }
     catch (err) {
       if (err instanceof AccountApiError && err.code === 'invalid_email') { setEmailError('邮箱格式不正确，请检查完整地址，例如 name@qq.com'); emailInput.current?.focus() }
@@ -92,7 +95,7 @@ export function AccountDialog({ open, session, busy, error, onClose: closeParent
     finally { setSending(false) }
   }
   const submit = async (event: React.FormEvent) => {
-    event.preventDefault(); setLocalError(''); setNotice('')
+    event.preventDefault(); setLocalError(''); setNotice(''); setShowParentError(true)
     if (!validateEmail()) return
     if (session) await onVerify(targetEmail.trim(), challenge, code)
     else if (mode === 'login') await onLogin(targetEmail.trim(), password)
@@ -109,7 +112,8 @@ export function AccountDialog({ open, session, busy, error, onClose: closeParent
     {emailField}
     <label>邮箱验证码<div className="account-code-row"><input aria-label="邮箱验证码" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} placeholder="6 位验证码" required value={code} onChange={event => setCode(event.target.value.replace(/\D/g, ''))} disabled={locked} /><button type="button" disabled={locked || cooldown > 0} onClick={() => void sendCode()}>{sending ? '发送中…' : cooldown ? `${cooldown} 秒后重发` : '获取验证码'}</button></div></label>
   </>
-  const feedback = <><div role="status" className="account-notice">{notice}</div>{(localError || error) && <div role="alert" className="account-error">{localError || error}</div>}</>
+  const visibleError = localError || (showParentError ? error : '')
+  const feedback = <><div role="status" className="account-notice">{notice}</div>{visibleError && <div role="alert" className="account-error">{visibleError}</div>}</>
   return <div className="account-overlay" onMouseDown={event => { if (event.currentTarget === event.target && !locked) onClose() }}>
     <section ref={panel} tabIndex={-1} className="account-dialog" role="dialog" aria-modal="true" aria-labelledby="account-title">
       <button className="account-close" type="button" disabled={locked} onClick={onClose} aria-label="关闭"><X size={18} /></button>
@@ -119,13 +123,20 @@ export function AccountDialog({ open, session, busy, error, onClose: closeParent
       {session ? <>
         <p className="account-email">{session.user.email} · {session.user.email_verified_at ? '已验证' : '待验证'}</p>
         <div className="account-quota-grid"><div><span>今日免费</span><strong>{session.quota.daily_remaining}</strong><small>/ {session.quota.daily_limit} 次</small></div><div><span>奖励额度</span><strong>{session.quota.bonus_remaining}</strong><small>次</small></div></div>
+        <section className="account-billing" aria-label="充值与会员">
+          <div className="account-billing-row">
+            <div className="account-paid-balance"><span>充值余额</span><strong>{session.quota.paid_remaining ?? 0}<small> 次</small></strong></div>
+            <Button className="account-recharge-button" aria-label={`支付宝充值 · 余额 ${session.quota.paid_remaining ?? 0} 次`} disabled={locked} onClick={onRecharge}><CreditCard size={15} /> 充值 / 选套餐</Button>
+          </div>
+          {session.quota.membership?.active && session.quota.membership.expires_at && <p className="account-membership-note">会员不限次 · 有效至 {new Date(session.quota.membership.expires_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })}（北京时间）。次数包和奖励余额保留。</p>}
+        </section>
         {!session.user.email_verified_at && <form className="account-form" onSubmit={event => void submit(event)}><p className="account-intro">首次验证邮箱赠 20 次导出。原有账号、项目和额度全部保留；如原邮箱填错，可改为你能收信的邮箱。</p>{verificationFields}{feedback}<button className="account-primary-button" disabled={locked || !challenge}>验证邮箱并领取 20 次</button></form>}
         {session.user.email_verified_at && feedback}
         <details className="account-rewards"><summary>奖励明细 · {rewards.length} 笔</summary>{rewards.length ? rewards.map((r, i) => <div key={i}><span>{({ email_verified: '邮箱验证', first_share: '首次有效分享', referral: '成功邀请' } as Record<string, string>)[r.kind] || r.kind}<small>{new Date(r.created_at).toLocaleString('zh-CN')}</small></span><strong>+{r.amount}</strong></div>) : <p>暂无本次活动奖励记录，历史公众号奖励仍计入余额。</p>}</details>
         <p className="account-security"><ShieldCheck size={15} /> 创作内容留在本机，账号同步邮箱和额度。</p>
         <button className="account-secondary-button" type="button" disabled={locked} onClick={() => void onLogout()}><LogOut size={15} /> 退出登录</button>
       </> : <>
-        <p className="account-intro">每日 10 次免费导出，新用户验证注册额外赠 20 次。</p>
+        <p className="account-intro">{mode === 'login' ? '首次使用请先注册。已注册账号使用邮箱和密码登录。' : mode === 'reset' ? '仅向已注册并验证的邮箱发送重置验证码；没有注册过，请先注册。' : '每日 10 次免费导出，验证邮箱完成注册后额外赠 20 次。'}</p>
         <div className="account-tabs"><button className={mode === 'login' ? 'is-active' : ''} disabled={locked} type="button" onClick={() => changeMode('login')}>登录</button><button className={mode === 'register' ? 'is-active' : ''} disabled={locked} type="button" onClick={() => changeMode('register')}>注册</button></div>
         <form className="account-form" onSubmit={event => void submit(event)}>
           {mode === 'register' && <label>昵称<input autoComplete="nickname" value={displayName} disabled={locked} onChange={event => setDisplayName(event.target.value)} required maxLength={32} /></label>}
@@ -134,7 +145,8 @@ export function AccountDialog({ open, session, busy, error, onClose: closeParent
           {feedback}<button className="account-primary-button" disabled={locked || (mode !== 'login' && !challenge)}>{busy ? '请稍候…' : mode === 'login' ? '登录' : mode === 'reset' ? '更新密码' : '验证并注册 · 领取 20 次'}</button>
         </form>
         {mode === 'login' && <button className="account-text-button" disabled={locked} onClick={() => changeMode('reset')}>忘记密码？</button>}
-        {mode === 'reset' && <p className="account-privacy">仅已验证的邮箱支持找回。老账号请先用原密码登录并验证邮箱；无法登录请联系公众号「老高 Vibe Coding」。</p>}
+        {mode !== 'register' && <Button variant="outline" className="account-secondary-button" disabled={locked} onClick={() => changeMode('register')}>首次使用？去注册</Button>}
+        {mode === 'reset' && <p className="account-intro">收不到邮件？确认填写的是注册邮箱并检查垃圾邮件。老账号未验证且忘记密码，请联系公众号「老高 Vibe Coding」核实，不要反复获取验证码。</p>}
         <p className="account-privacy">验证码 5 分钟有效、只能使用一次。我们不索取你的验证码。</p>
       </>}
     </section>

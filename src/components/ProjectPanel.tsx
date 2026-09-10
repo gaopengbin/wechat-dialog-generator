@@ -1,5 +1,7 @@
 import { Check, Clock3, Copy, FolderOpen, Plus, Trash2 } from 'lucide-react'
 import type { ChatProject } from '@/lib/project-store'
+import { Button } from './ui/button'
+import { Input } from './ui/input'
 
 interface ProjectPanelProps {
   projects: ChatProject[]
@@ -42,7 +44,7 @@ export function ProjectPanel({
         <div>
           <span className="project-kicker"><FolderOpen size={14} /> 本地工作区</span>
           <div className="project-title-row">
-            <input
+            <Input
               aria-label="当前项目名称"
               className="project-name-input"
               value={activeProjectName}
@@ -58,9 +60,9 @@ export function ProjectPanel({
             </span>
           </div>
         </div>
-        <button className="btn btn-outline btn-sm" type="button" onClick={onCreate}>
+        <Button variant="outline" size="sm" type="button" onClick={onCreate}>
           <Plus size={15} /> 新建对话
-        </button>
+        </Button>
       </div>
 
       {!storageAvailable && (
@@ -74,19 +76,19 @@ export function ProjectPanel({
               className={`project-recent-item${project.id === activeProjectId ? ' is-active' : ''}`}
               key={project.id}
             >
-              <button className="project-open-button" type="button" onClick={() => onOpen(project)}>
+              <Button variant="ghost" className="project-open-button" style={{ display: 'block', height: 'auto', minHeight: 48 }} type="button" onClick={() => onOpen(project)}>
                 <span className="project-recent-name">{project.name}</span>
                 <span className="project-recent-meta">
                   <Clock3 size={12} /> {updatedLabel(project.updatedAt)} · {project.messages.length} 条消息
                 </span>
-              </button>
+              </Button>
               <div className="project-item-actions">
-                <button title="复制项目" aria-label={`复制${project.name}`} type="button" onClick={() => onDuplicate(project)}>
+                <Button variant="ghost" size="icon" title="复制项目" aria-label={`复制${project.name}`} type="button" onClick={() => onDuplicate(project)}>
                   <Copy size={14} />
-                </button>
-                <button title="删除项目" aria-label={`删除${project.name}`} type="button" onClick={() => onDelete(project)}>
+                </Button>
+                <Button variant="ghost" size="icon" title="删除项目" aria-label={`删除${project.name}`} type="button" onClick={() => onDelete(project)}>
                   <Trash2 size={14} />
-                </button>
+                </Button>
               </div>
             </article>
           ))}

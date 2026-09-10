@@ -367,9 +367,16 @@ body {
 .account-privacy { margin-top: 14px; color: #959c98; font-size: 10px; text-align: center; }
 .account-quota-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 24px; }
 .account-quota-grid > div { padding: 16px; border: 1px solid #e4eae6; border-radius: 14px; background: #fafcfb; }
-.account-quota-grid span { display: block; color: #7b857f; font-size: 10px; }
+.account-quota-grid span { display: block; color: var(--control-muted); font-size: 12px; }
 .account-quota-grid strong { display: inline-block; margin-top: 6px; color: #087a41; font-size: 27px; }
-.account-quota-grid small { margin-left: 3px; color: #87908b; font-size: 10px; }
+.account-quota-grid small { margin-left: 3px; color: var(--control-muted); font-size: 11px; }
+.account-billing { margin-top: 16px; padding: 14px 16px; border: 1px solid #dce9e0; border-radius: 12px; background: #f3f9f5; }
+.account-billing-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.account-paid-balance > span { display: block; color: var(--control-muted); font-size: 12px; }
+.account-paid-balance strong { display: block; margin-top: 4px; font-size: 23px; line-height: 1.2; color: var(--control-foreground); font-variant-numeric: tabular-nums; }
+.account-paid-balance small { font-size: 12px; font-weight: 400; color: var(--control-muted); }
+.account-billing .account-recharge-button { flex-shrink: 0; }
+.account-membership-note { margin-top: 12px; padding-top: 12px; border-top: 1px solid #dce9e0; color: #176b43; font-size: 12px; line-height: 1.65; }
 .account-security { display: flex; align-items: center; gap: 6px; margin-top: 15px; color: #728078; font-size: 10px; }
 .account-code-row { display: flex; gap: 8px; min-width: 0; }
 .account-code-row input { min-width: 0; flex: 1; }
@@ -405,7 +412,7 @@ body {
   margin: 24px auto 0;
   padding: 8px;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 7px;
   border: 1px solid rgba(0,0,0,.06);
   border-radius: 18px;
@@ -437,7 +444,7 @@ body {
   box-shadow: 0 5px 15px rgba(7,120,63,.07);
 }
 .wechat-tool-dock svg { flex: 0 0 auto; }
-.wechat-tool-dock span span { min-width: 0; display: block; }
+.wechat-tool-dock button > span { min-width: 0; display: block; }
 .wechat-tool-dock strong { display: block; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .wechat-tool-dock small { display: block; overflow: hidden; margin-top: 3px; color: #989e9a; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .wechat-tool-coming { opacity: .55; }
@@ -1651,7 +1658,7 @@ input[type="range"].form-range::-webkit-slider-thumb:hover {
   .project-workspace { padding: 16px; border-radius: 17px; }
   .wechat-tool-dock { display: flex; overflow-x: auto; }
   .wechat-tool-dock button,
-  .wechat-tool-coming { min-width: 158px; }
+  .wechat-tool-coming { min-width: 158px; flex: 0 0 170px; }
   .moments-workbench { padding: 0 12px; margin-top: 18px; gap: 24px; }
   .moments-controls .s-card-body { padding: 18px; }
   .moments-form-grid,
