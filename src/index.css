@@ -358,7 +358,12 @@ body {
 .account-primary-button { margin-top: 3px; background: #07b65a; color: #fff; }
 .account-secondary-button { width: 100%; margin-top: 18px; border: 1px solid #dce2de; background: #fff; color: #56615b; }
 .account-primary-button:disabled,.account-secondary-button:disabled { cursor: wait; opacity: .62; }
-.account-error { padding: 9px 11px; border-radius: 9px; background: #fff2f0; color: #b34232; font-size: 11px; }
+.account-error { padding: 9px 11px; border-radius: 9px; background: #fff2f0; color: #b34232; font-size: 13px; line-height: 1.6; }
+.account-field-hint,.account-field-error { font-size: 13px; font-weight: 400; line-height: 1.6; overflow-wrap: anywhere; }
+.account-field-hint { color: #626e66; }
+.account-field-error { color: #b12e21; }
+.account-form input[aria-invalid="true"] { border-color: #c43e30; background: #fffafa; }
+.account-form input[aria-invalid="true"]:focus { box-shadow: 0 0 0 3px rgba(196,62,48,.12); }
 .account-privacy { margin-top: 14px; color: #959c98; font-size: 10px; text-align: center; }
 .account-quota-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 24px; }
 .account-quota-grid > div { padding: 16px; border: 1px solid #e4eae6; border-radius: 14px; background: #fafcfb; }

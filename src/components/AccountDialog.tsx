@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { LogOut, ShieldCheck, UserRound, X } from 'lucide-react'
-import { getRewards, requestEmailCode, resetAccountPassword, type AccountSession, type Reward } from '@/lib/account-api'
+import { AccountApiError, getRewards, requestEmailCode, resetAccountPassword, type AccountSession, type Reward } from '@/lib/account-api'
+import { emailValidationMessage } from '@/lib/email-validation'
 import { trackGrowthEvent } from '@/lib/growth-analytics'
 
 interface AccountDialogProps {
@@ -17,7 +18,9 @@ interface AccountDialogProps {
 
 export function AccountDialog({ open, session, busy, error, onClose: closeParent, onLogin, onRegister, onVerify, onLogout }: AccountDialogProps) {
   const [mode, setMode] = useState<'login' | 'register' | 'reset'>('login')
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState<string | null>(null)
+  const [emailError, setEmailError] = useState('')
+  const emailInput = useRef<HTMLInputElement>(null)
   const [password, setPassword] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [code, setCode] = useState('')
@@ -30,7 +33,7 @@ export function AccountDialog({ open, session, busy, error, onClose: closeParent
   const panel = useRef<HTMLElement>(null)
   const locked = busy || sending
   const purpose = session ? 'bind' : mode === 'reset' ? 'reset' : 'register'
-  const targetEmail = email || (session?.user.email ?? '')
+  const targetEmail = email ?? (session?.user.email ?? '')
   const formMode = session ? session.user.email_verified_at ? 'account' : 'bind' : mode
   const viewedMode = useRef('')
   useEffect(() => {
@@ -71,28 +74,40 @@ export function AccountDialog({ open, session, busy, error, onClose: closeParent
   }, [open, session])
   if (!open) return null
 
-  const changeMode = (next: typeof mode) => { if (next !== mode) trackGrowthEvent('account_form_closed', { mode: formMode }); setMode(next); setPassword(''); setChallenge(''); setCode(''); setNotice(''); setLocalError('') }
+  const changeMode = (next: typeof mode) => { if (next !== mode) trackGrowthEvent('account_form_closed', { mode: formMode }); setMode(next); setPassword(''); setChallenge(''); setCode(''); setNotice(''); setLocalError(''); setEmailError('') }
+  const validateEmail = () => {
+    const message = emailValidationMessage(targetEmail)
+    setEmailError(message)
+    if (message) emailInput.current?.focus()
+    return !message
+  }
   const sendCode = async () => {
+    if (!validateEmail()) return
     setSending(true); setLocalError(''); setNotice('')
-    try { const result = await requestEmailCode(targetEmail, purpose); setChallenge(result.challenge_id); setCooldown(result.retry_after); setNotice(result.message) }
-    catch (err) { setLocalError(err instanceof Error ? err.message : '发送失败，请重试') }
+    try { const result = await requestEmailCode(targetEmail.trim(), purpose); setChallenge(result.challenge_id); setCooldown(result.retry_after); setNotice(result.message) }
+    catch (err) {
+      if (err instanceof AccountApiError && err.code === 'invalid_email') { setEmailError('邮箱格式不正确，请检查完整地址，例如 name@qq.com'); emailInput.current?.focus() }
+      else setLocalError(err instanceof Error ? err.message : '发送失败，请重试')
+    }
     finally { setSending(false) }
   }
   const submit = async (event: React.FormEvent) => {
     event.preventDefault(); setLocalError(''); setNotice('')
-    if (session) await onVerify(targetEmail, challenge, code)
-    else if (mode === 'login') await onLogin(email, password)
-    else if (mode === 'register') await onRegister(email, password, displayName, challenge, code)
+    if (!validateEmail()) return
+    if (session) await onVerify(targetEmail.trim(), challenge, code)
+    else if (mode === 'login') await onLogin(targetEmail.trim(), password)
+    else if (mode === 'register') await onRegister(targetEmail.trim(), password, displayName, challenge, code)
     else {
       setSending(true)
-      try { await resetAccountPassword(email, password, challenge, code); changeMode('login'); setPassword(''); setNotice('密码已更新，其他设备已退出，请用新密码登录') }
+      try { await resetAccountPassword(targetEmail.trim(), password, challenge, code); changeMode('login'); setPassword(''); setNotice('密码已更新，其他设备已退出，请用新密码登录') }
       catch (err) { setLocalError(err instanceof Error ? err.message : '重置失败') }
       finally { setSending(false) }
     }
   }
+  const emailField = <label>邮箱<input ref={emailInput} type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} value={targetEmail} disabled={locked} aria-invalid={Boolean(emailError)} aria-describedby="account-email-feedback" onChange={event => { const value = event.target.value; setEmail(value); setChallenge(''); setCode(''); setNotice(''); if (emailError) setEmailError(emailValidationMessage(value)) }} onBlur={() => { if (targetEmail) setEmailError(emailValidationMessage(targetEmail)) }} onInvalid={event => { event.preventDefault(); setEmailError(emailValidationMessage(targetEmail) || '请输入有效邮箱，例如 name@qq.com'); emailInput.current?.focus() }} placeholder="name@qq.com" required maxLength={160} /><span id="account-email-feedback" className={emailError ? 'account-field-error' : 'account-field-hint'} role={emailError ? 'alert' : undefined}>{emailError || '填写你能正常收信的完整邮箱地址'}</span></label>
   const verificationFields = <>
-    <label>邮箱<input type="email" autoComplete="email" value={targetEmail} disabled={locked} onChange={event => { setEmail(event.target.value); setChallenge(''); setCode('') }} placeholder="name@example.com" required maxLength={160} /></label>
-    <label>邮箱验证码<div className="account-code-row"><input aria-label="邮箱验证码" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} placeholder="6 位验证码" required value={code} onChange={event => setCode(event.target.value.replace(/\D/g, ''))} disabled={locked} /><button type="button" disabled={locked || cooldown > 0 || !targetEmail} onClick={() => void sendCode()}>{sending ? '发送中…' : cooldown ? `${cooldown} 秒后重发` : '获取验证码'}</button></div></label>
+    {emailField}
+    <label>邮箱验证码<div className="account-code-row"><input aria-label="邮箱验证码" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} placeholder="6 位验证码" required value={code} onChange={event => setCode(event.target.value.replace(/\D/g, ''))} disabled={locked} /><button type="button" disabled={locked || cooldown > 0} onClick={() => void sendCode()}>{sending ? '发送中…' : cooldown ? `${cooldown} 秒后重发` : '获取验证码'}</button></div></label>
   </>
   const feedback = <><div role="status" className="account-notice">{notice}</div>{(localError || error) && <div role="alert" className="account-error">{localError || error}</div>}</>
   return <div className="account-overlay" onMouseDown={event => { if (event.currentTarget === event.target && !locked) onClose() }}>
@@ -114,7 +129,7 @@ export function AccountDialog({ open, session, busy, error, onClose: closeParent
         <div className="account-tabs"><button className={mode === 'login' ? 'is-active' : ''} disabled={locked} type="button" onClick={() => changeMode('login')}>登录</button><button className={mode === 'register' ? 'is-active' : ''} disabled={locked} type="button" onClick={() => changeMode('register')}>注册</button></div>
         <form className="account-form" onSubmit={event => void submit(event)}>
           {mode === 'register' && <label>昵称<input autoComplete="nickname" value={displayName} disabled={locked} onChange={event => setDisplayName(event.target.value)} required maxLength={32} /></label>}
-          {mode === 'login' ? <label>邮箱<input type="email" autoComplete="email" value={email} disabled={locked} onChange={event => setEmail(event.target.value)} required /></label> : verificationFields}
+          {mode === 'login' ? emailField : verificationFields}
           <label>{mode === 'reset' ? '新密码' : '密码'}<input type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} value={password} disabled={locked} onChange={event => setPassword(event.target.value)} placeholder="8–72 个字符" required minLength={8} maxLength={72} /></label>
           {feedback}<button className="account-primary-button" disabled={locked || (mode !== 'login' && !challenge)}>{busy ? '请稍候…' : mode === 'login' ? '登录' : mode === 'reset' ? '更新密码' : '验证并注册 · 领取 20 次'}</button>
         </form>
