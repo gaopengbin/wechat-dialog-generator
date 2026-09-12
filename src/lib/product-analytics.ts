@@ -1,4 +1,5 @@
 import type { GrowthEvent } from './growth-analytics'
+import { withRequestTimeout } from './request-timeout'
 const endpoint = import.meta.env?.VITE_PRODUCT_ANALYTICS_ENDPOINT ||
   (typeof window !== 'undefined' && ['gaopengbin.github.io', 'chat.laogao.xyz'].includes(window.location.hostname)
     ? 'https://laogao.xyz/platform-api/v1/product-events'
@@ -109,13 +110,13 @@ export async function sendProductEnvelope(url: string, payload: unknown, fetcher
   const body = JSON.stringify(payload)
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const response = await fetcher(url, {
+      const response = await withRequestTimeout(signal => fetcher(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body,
       keepalive: true,
-      signal: AbortSignal.timeout(5000),
-      })
+      signal,
+      }), 5000)
       if (response.ok) return true
       if (response.status < 500) return false
     } catch { /* retry transient errors only once, keeping the same event ID */ }
