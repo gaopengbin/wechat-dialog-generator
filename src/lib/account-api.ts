@@ -1,4 +1,5 @@
 import { measureGrowthRequest } from './growth-analytics'
+import { withRequestTimeout } from './request-timeout'
 const apiRoot = import.meta.env.VITE_ACCOUNT_API_ENDPOINT ||
   (['gaopengbin.github.io', 'chat.laogao.xyz'].includes(window.location.hostname)
     ? 'https://laogao.xyz/platform-api/v1'
@@ -73,26 +74,36 @@ function request<T>(path: string, options: RequestInit = {}, credential?: string
 async function rawRequest<T>(path: string, options: RequestInit = {}, credential?: string) {
   if (credential !== undefined) assertExportIdentity({ userId: null, credential })
   const sessionToken = credential ?? token()
-  const response = await fetch(`${apiRoot}${path}`, {
-    signal: AbortSignal.timeout(20000),
-    ...options,
-    headers: {
-      ...(options.body ? { 'content-type': 'application/json' } : {}),
-      ...(sessionToken ? { authorization: `Bearer ${sessionToken}` } : {}),
-      ...options.headers,
-    },
-  })
-  const payload = await response.json().catch(() => ({})) as T & {
-    error?: { code?: string; message?: string }
+  try {
+    return await withRequestTimeout(async signal => {
+      const response = await fetch(`${apiRoot}${path}`, {
+        ...options,
+        signal,
+        headers: {
+          ...(options.body ? { 'content-type': 'application/json' } : {}),
+          ...(sessionToken ? { authorization: `Bearer ${sessionToken}` } : {}),
+          ...options.headers,
+        },
+      })
+      const payload = await response.json().catch(error => {
+        if (signal.aborted) throw error
+        return {}
+      }) as T & {
+        error?: { code?: string; message?: string }
+      }
+      if (!response.ok) {
+        throw new AccountApiError(
+          response.status,
+          payload.error?.code ?? 'request_failed',
+          payload.error?.message ?? '请求失败，请稍后重试',
+        )
+      }
+      return payload
+    }, 20000, options.signal)
+  } catch (error) {
+    if (error instanceof TypeError) throw new TypeError('暂时无法连接服务，请检查网络后重试。')
+    throw error
   }
-  if (!response.ok) {
-    throw new AccountApiError(
-      response.status,
-      payload.error?.code ?? 'request_failed',
-      payload.error?.message ?? '请求失败，请稍后重试',
-    )
-  }
-  return payload
 }
 
 function saveToken(value: string) {
