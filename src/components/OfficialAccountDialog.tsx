@@ -91,7 +91,7 @@ export function OfficialAccountDialog({ open, placement, authenticated, busy, re
         <div className="official-account-actions">
           <button className="official-account-dismiss" type="button" onClick={() => { setCode(''); onClose() }}>暂时不用，继续制作</button>
         </div>
-        <small className="official-account-note">未登录仍有每日 10 次免费额度；账户仅同步额度，不上传创作内容。</small>
+        <small className="official-account-note">编辑和预览免费，导出需登录；登录后每日 10 次免费额度，不上传创作内容。</small>
       </section>
     </div>
   )
