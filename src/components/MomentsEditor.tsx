@@ -124,17 +124,20 @@ export function MomentsEditor({ onToast, onBeforeExport, onExportSuccess }: Mome
         pixelRatio: 2,
         backgroundColor: '#ffffff',
       })
+      log.stage('authorize');
       const ticket = onBeforeExport ? await onBeforeExport() : true
       if (!ticket) { void log.finish('cancelled', '额度校验未通过'); return }
+      log.stage('encode');
       const link = document.createElement('a')
       link.download = filename
       link.href = canvas.toDataURL('image/png')
+      log.stage('download');
       link.click()
       void log.finish('download_requested')
       onToast('朋友圈图片已下载')
       onExportSuccess?.(ticket)
-    } catch {
-      void log.finish('failed', '朋友圈图片生成或下载失败')
+    } catch (error) {
+      void log.finish('failed', '朋友圈图片生成或下载失败', error)
       onToast('朋友圈图片生成失败')
     }
   }, [onBeforeExport, onExportSuccess, onToast])

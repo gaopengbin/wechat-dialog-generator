@@ -1,6 +1,15 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { paymentError, paymentIntentKey, reserveCheckoutWindow, safeCheckoutUrl } from './payment-ui'
+import { paymentError, paymentIntentKey, paymentWindowExpired, reserveCheckoutWindow, safeCheckoutUrl } from './payment-ui'
+
+test('payment expiry follows fixed deadline and authoritative server flag', () => {
+  const time = Date.parse('2026-09-17T00:00:00Z')
+  const order = { expires_at: new Date(time).toISOString() }
+  assert.equal(paymentWindowExpired(order, time - 1), false)
+  assert.equal(paymentWindowExpired(order, time), true)
+  assert.equal(paymentWindowExpired({ ...order, checkout_expired: true }, time - 10000), true)
+  assert.equal(paymentWindowExpired({}, time), false)
+})
 
 test('checkout accepts only the official HTTPS gateway endpoints', () => {
   assert.equal(safeCheckoutUrl('https://openapi.alipay.com/gateway.do?a=b'), 'https://openapi.alipay.com/gateway.do?a=b')

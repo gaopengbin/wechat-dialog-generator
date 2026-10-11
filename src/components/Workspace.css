@@ -31,6 +31,7 @@
 .studio-breadcrumb > span:first-child { color: #9aa89f; font-size: 22px; font-weight: 300; }
 .studio-breadcrumb b { color: var(--studio-fg); font-weight: 500; white-space: nowrap; }
 .studio-header-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.studio-official-account-action { height: 34px; padding: 0 10px; color: var(--studio-muted); white-space: nowrap; }
 .studio-icon-action { display: grid; place-items: center; width: 34px; height: 34px; background: white; color: var(--studio-muted); border: 1px solid var(--studio-border); border-radius: 7px; cursor: pointer; }
 .studio-header .account-trigger { border-radius: 7px; font-weight: 500; max-width: 200px; }
 .studio-header .account-trigger > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 92px; }

@@ -4,6 +4,10 @@ export function safeCheckoutUrl(value: string) {
   return url.href
 }
 
+export function paymentWindowExpired(order: { expires_at?: string; checkout_expired?: boolean }, now = Date.now()) {
+  return order.checkout_expired === true || Boolean(order.expires_at && Date.parse(order.expires_at) <= now)
+}
+
 // Reserve the tab during the click, before the network await loses user activation.
 // Detach opener immediately; never pass account tokens to the new document.
 export function reserveCheckoutWindow(openWindow: () => Window | null = () => window.open('about:blank', '_blank')) {

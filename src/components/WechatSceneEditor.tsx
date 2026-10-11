@@ -130,17 +130,20 @@ export function WechatSceneEditor({ kind, onToast, onBeforeExport, onExportSucce
     onToast('正在生成模拟页面…')
     try {
       const canvas = await toCanvas(previewRef.current, { pixelRatio: 2, backgroundColor: '#f5f5f5' })
+      log.stage('authorize');
       const ticket = onBeforeExport ? await onBeforeExport() : true
       if (!ticket) { void log.finish('cancelled', '额度校验未通过'); return }
+      log.stage('encode');
       const link = document.createElement('a')
       link.download = filename
       link.href = canvas.toDataURL('image/png')
+      log.stage('download');
       link.click()
       void log.finish('download_requested')
       onToast('图片已下载')
       onExportSuccess?.(ticket)
-    } catch {
-      void log.finish('failed', '模拟页面生成或下载失败')
+    } catch (error) {
+      void log.finish('failed', '模拟页面生成或下载失败', error)
       onToast('图片生成失败')
     }
   }

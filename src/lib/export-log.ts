@@ -1,4 +1,6 @@
 import type { WechatTool } from './product-analytics'
+import { trackProductEvent } from './product-analytics'
+import { browserFamily, exportReason, type ExportStage } from './export-diagnostics'
 
 export const exportLogDatabase = 'wechat-toolbox-export-log'
 export const exportLogChanged = 'wechat-toolbox:export-log-changed'
@@ -54,17 +56,28 @@ async function writeExportLog(record: ExportLog) {
 
 // Independent of analytics/account APIs: metadata stays in this browser. Log
 // failures never convert a successful export into a failed export or a retry.
-export function createExportLogger(write: (record: ExportLog) => Promise<unknown>, onError: () => void) {
+export function createExportLogger(write: (record: ExportLog) => Promise<unknown>, onError: () => void, report: (properties: Record<string, string>) => unknown = () => {}) {
   return (input: Pick<ExportLog, 'tool' | 'mode'> & Partial<Pick<ExportLog, 'filename' | 'count'>>) => {
     const record: ExportLog = { id: crypto.randomUUID(), tool: input.tool, mode: input.mode, filename: input.filename || '', count: input.count ?? 1, startedAt: new Date().toISOString(), outcome: 'pending', note: '' }
     const safelyWrite = (value: ExportLog) => Promise.resolve().then(() => write(value)).catch(() => { try { onError() } catch { /* reporting is best effort */ } })
     let tail = safelyWrite({ ...record })
     let finished = false
+    let stage: ExportStage = 'render'
     return {
       id: record.id,
-      finish(outcome: Exclude<ExportOutcome, 'pending'>, note = '') {
+      stage(value: ExportStage) { stage = value },
+      finish(outcome: Exclude<ExportOutcome, 'pending'>, note = '', error?: unknown) {
         if (finished) return tail
         finished = true
+        if (outcome === 'failed') {
+          const reason = exportReason(error)
+          note += ` [${stage}/${reason}; ${record.id}]`
+          // Independent of IndexedDB; synchronous and async reporter failures are isolated.
+          void Promise.resolve().then(() => report({
+            diagnostic_id: record.id, tool: record.tool, capture_mode: record.mode,
+            stage, reason, browser: browserFamily(typeof navigator === 'undefined' ? '' : navigator.userAgent),
+          })).catch(() => {})
+        }
         const result = { ...record, outcome, note, finishedAt: new Date().toISOString() }
         tail = tail.then(() => safelyWrite(result))
         return tail
@@ -74,7 +87,7 @@ export function createExportLogger(write: (record: ExportLog) => Promise<unknown
 }
 export const beginExportLog = createExportLogger(writeExportLog, () => {
   if (typeof window !== 'undefined') window.dispatchEvent(new Event(exportLogError))
-})
+}, properties => trackProductEvent('export_failed', properties))
 
 export function filterExportLogs(records: ExportLog[], filters: { tool: string; outcome: string; days: string; search: string }, now = new Date()) {
   const cutoff = new Date(now)

@@ -5,7 +5,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useConfirm } from '@/lib/use-confirm';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { captureChatPhone } from '@/lib/capture-chat';
-import { ArrowLeft, ArrowRight, BellRing, BookOpen, Check, ChevronRight, Download, Copy, FolderOpen, History, Image as ImageIcon, LayoutGrid, MessageSquare, Settings2, Share2, ShieldCheck, UserRound, UsersRound } from 'lucide-react';
+import { ArrowLeft, ArrowRight, MessageCircle, BookOpen, Check, ChevronRight, Download, Copy, FolderOpen, History, Image as ImageIcon, LayoutGrid, MessageSquare, Settings2, Share2, ShieldCheck, UserRound, UsersRound } from 'lucide-react';
 import { ImportPanel } from '@/components/ImportPanel';
 import { UserAvatarManager } from '@/components/UserAvatarManager';
 import { MessageEditor } from '@/components/MessageEditor';
@@ -53,12 +53,11 @@ import {
 } from '@/lib/product-analytics';
 import {
   AccountApiError,
-  captureExportIdentity, assertExportIdentity, isExportIdentityCurrent,
+  captureExportIdentity, isExportIdentityCurrent,
   type ExportIdentity,
   verifyAccountEmail, pendingInvite, visitInvite, completeAccountExport,
   consumeAccountExport,
-  consumeGuestExport,
-  guestQuota,
+  loggedOutQuota, requireExportLogin,
   loginAccount,
   logoutAccount,
   redeemFollowBonus,
@@ -93,7 +92,7 @@ function App() {
   const [accountSession, setAccountSession] = useState<AccountSession | null>(null);
   const accountSessionRef = useRef(accountSession);
   useEffect(() => { accountSessionRef.current = accountSession }, [accountSession]);
-  const [visibleQuota, setVisibleQuota] = useState<ExportQuota>(() => guestQuota());
+  const [visibleQuota, setVisibleQuota] = useState<ExportQuota>(() => loggedOutQuota());
   const unlimited = Boolean(visibleQuota.membership?.active && Date.parse(visibleQuota.membership.expires_at || '') > Date.now());
   const [accountBusy, setAccountBusy] = useState(false);
   const [accountError, setAccountError] = useState('');
@@ -393,7 +392,7 @@ function App() {
     try {
       await logoutAccount();
       setAccountSession(null);
-      setVisibleQuota(guestQuota());
+      setVisibleQuota(loggedOutQuota());
       setAccountPrompt(false);
       showToast('已退出登录');
     } finally {
@@ -430,22 +429,34 @@ function App() {
   }, []);
   const exportIdentity = captureExportIdentity(accountSession);
 
+  const ensureExportLogin = useCallback(() => {
+    try { requireExportLogin(exportIdentity); return true; }
+    catch {
+      setAccountError('请先登录后导出，编辑内容和预览会保留。');
+      setAccountPrompt(true);
+      return false;
+    }
+  }, [exportIdentity]);
+
   const authorizeExport = useCallback(async () => {
     try {
       const identity = exportIdentity;
-      assertExportIdentity(identity);
-      const reservation = identity.userId ? await consumeAccountExport(crypto.randomUUID(), identity) : null;
-      const quota = reservation ? reservation.quota : consumeGuestExport();
-      if (reservation) exportIdentities.current.set(reservation.action_id, identity);
-      applyExportQuota(identity, quota);
-      return reservation?.action_id || true;
+      requireExportLogin(identity);
+      const reservation = await consumeAccountExport(crypto.randomUUID(), identity);
+      exportIdentities.current.set(reservation.action_id, identity);
+      applyExportQuota(identity, reservation.quota);
+      return reservation.action_id;
     } catch (error) {
       const message = error instanceof Error ? error.message : '暂时无法确认导出额度';
       showToast(message);
+      if (error instanceof AccountApiError && error.status === 401) {
+        setAccountError('请先登录后导出，编辑内容和预览会保留。');
+        setAccountPrompt(true);
+      }
       if (error instanceof AccountApiError && error.code === 'quota_exhausted') {
         if (accountSession) openOfficialAccountPrompt('export');
         else {
-          setAccountError('今日免费额度已用完，登录后可继续使用并领取关注奖励。');
+          setAccountError('请先登录后导出。');
           setAccountPrompt(true);
         }
       }
@@ -454,21 +465,18 @@ function App() {
   }, [accountSession, exportIdentity, applyExportQuota, openOfficialAccountPrompt, showToast]);
 
   const batchOwners = useRef(new Map<string, string>());
-  const batchGuestDebits = useRef(new Set<string>());
   const debitBatchExport = useCallback(async (id: string) => {
     const identity = exportIdentity;
-    assertExportIdentity(identity);
-    const owner = identity.userId || 'guest';
+    if (!ensureExportLogin()) throw new AccountApiError(401, 'login_required', '请先登录后导出。');
+    requireExportLogin(identity);
+    const owner = identity.userId!;
     const previousOwner = batchOwners.current.get(id);
     if (previousOwner && previousOwner !== owner) throw new Error('账号已切换，请回到原账号重试这张卡片，避免重复扣费。');
     batchOwners.current.set(id, owner);
-    if (!identity.userId && batchGuestDebits.current.has(id)) return;
-    const result = identity.userId ? await consumeAccountExport(id, identity) : null;
-    const quota = result ? result.quota : consumeGuestExport();
-    if (!identity.userId) batchGuestDebits.current.add(id);
-    else exportIdentities.current.set(id, identity);
-    applyExportQuota(identity, quota);
-  }, [exportIdentity, applyExportQuota]);
+    const result = await consumeAccountExport(id, identity);
+    exportIdentities.current.set(id, identity);
+    applyExportQuota(identity, result.quota);
+  }, [exportIdentity, applyExportQuota, ensureExportLogin]);
 
   const handleRedeem = useCallback(async (code: string) => {
     setAccountBusy(true);
@@ -696,11 +704,14 @@ function App() {
     try {
       const canvas = await capturePhone(false);
       if (!canvas) { void log.finish('failed', '未能获取聊天预览'); return; }
+      log.stage('authorize');
       const ticket = await authorizeExport();
       if (!ticket) { void log.finish('cancelled', '额度校验未通过'); return; }
+      log.stage('encode');
       const link = document.createElement('a');
       link.download = filename;
       link.href = canvas.toDataURL('image/png');
+      log.stage('download');
       link.click();
       void log.finish('download_requested');
       completeExport(ticket);
@@ -712,7 +723,7 @@ function App() {
       showToast('图片已生成并下载！');
       promptAfterExport();
     } catch (e: unknown) {
-      void log.finish('failed', '图片生成或下载操作失败');
+      void log.finish('failed', '图片生成或下载操作失败', e);
       showToast('生成失败：' + (e instanceof Error ? e.message : String(e)));
     }
   }, [showToast, capturePhone, messages.length, promptAfterExport, authorizeExport, completeExport]);
@@ -724,11 +735,14 @@ function App() {
     try {
       const canvas = await capturePhone(false);
       if (!canvas) { void log.finish('failed', '未能获取聊天预览'); return; }
+      log.stage('encode');
       canvas.toBlob(async (blob) => {
         if (!blob) { void log.finish('failed', '图片转换失败'); return; }
         try {
-          const ticket = await authorizeExport();
+          log.stage('authorize');
+      const ticket = await authorizeExport();
           if (!ticket) { void log.finish('cancelled', '额度校验未通过'); return; }
+          log.stage('clipboard');
           await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
           void log.finish('copied');
           completeExport(ticket);
@@ -739,13 +753,13 @@ function App() {
           });
           showToast('图片已复制到剪贴板！');
           promptAfterExport();
-        } catch {
-          void log.finish('failed', '图片复制失败，请检查剪贴板权限');
+        } catch (error) {
+          void log.finish('failed', '图片复制失败，请检查剪贴板权限', error);
           showToast('复制失败，请使用下载功能');
         }
       });
-    } catch {
-      void log.finish('failed', '图片生成失败');
+    } catch (error) {
+      void log.finish('failed', '图片生成失败', error);
       showToast('操作失败');
     }
   }, [showToast, capturePhone, messages.length, promptAfterExport, authorizeExport, completeExport]);
@@ -758,11 +772,14 @@ function App() {
     try {
       const canvas = await capturePhone(true);
       if (!canvas) { void log.finish('failed', '未能获取聊天预览'); return; }
+      log.stage('authorize');
       const ticket = await authorizeExport();
       if (!ticket) { void log.finish('cancelled', '额度校验未通过'); return; }
+      log.stage('encode');
       const link = document.createElement('a');
       link.download = filename;
       link.href = canvas.toDataURL('image/png');
+      log.stage('download');
       link.click();
       void log.finish('download_requested');
       completeExport(ticket);
@@ -774,7 +791,7 @@ function App() {
       showToast('长截图已生成并下载！');
       promptAfterExport();
     } catch (e: unknown) {
-      void log.finish('failed', '长图生成或下载操作失败');
+      void log.finish('failed', '长图生成或下载操作失败', e);
       showToast('生成失败：' + (e instanceof Error ? e.message : String(e)));
     }
   }, [showToast, capturePhone, messages.length, promptAfterExport, authorizeExport, completeExport]);
@@ -789,9 +806,9 @@ function App() {
           <div className="studio-breadcrumb"><span>/</span><span>{isWorking ? '工作空间' : '创作中心'}</span><ChevronRight size={14} /><b>{workspaceTools.find(tool => tool.id === route)?.title || (route === 'exports' ? '导出日志' : route === 'resources' ? '模板与指南' : '工具概览')}</b></div>
           <div className="studio-header-actions">
             <UpdateAnnouncement blocked={accountPrompt || paymentPrompt || shareOpen || officialAccountPrompt !== null || Boolean(confirmation)} />
-            <Button className="studio-icon-action" type="button" aria-label="关注公众号" title="关注公众号" onClick={() => openOfficialAccountPrompt('header')}><BellRing size={17} /></Button>
+            <Button variant="outline" size="sm" className="studio-official-account-action" type="button" aria-label="关注公众号" title="关注公众号" onClick={() => openOfficialAccountPrompt('header')}><MessageCircle size={17} /><span>公众号</span></Button>
             <RewardHeaderButton onClick={() => setShareOpen(true)} />
-            <Button className="account-trigger" type="button" aria-label={`账户：${accountSession?.user.display_name ?? '未登录'}，${unlimited ? '会员不限次' : `剩余 ${visibleQuota.total_remaining} 次`}`} onClick={() => { setAccountError(''); setAccountPrompt(true) }}><UserRound size={15} /><span>{accountSession ? accountSession.user.display_name : '登录'}</span><small>{unlimited ? '会员' : `${visibleQuota.total_remaining} 次`}</small></Button>
+            <Button className="account-trigger" type="button" aria-label={`账户：${accountSession?.user.display_name ?? '未登录'}，${!accountSession ? '登录后导出' : unlimited ? '会员不限次' : `剩余 ${visibleQuota.total_remaining} 次`}`} onClick={() => { setAccountError(''); setAccountPrompt(true) }}><UserRound size={15} /><span>{accountSession ? accountSession.user.display_name : '登录'}</span><small>{!accountSession ? '导出需登录' : unlimited ? '会员' : `${visibleQuota.total_remaining} 次`}</small></Button>
           </div>
         </header>
         <div className="studio-layout">
@@ -802,7 +819,7 @@ function App() {
             <StudioLink route="exports" onNavigate={navigate} aria-label="导出日志" title="导出日志" className={`studio-overview-link ${route === 'exports' ? 'is-active' : ''}`} aria-current={route === 'exports' ? 'page' : undefined}><History size={17} /><span>导出日志</span></StudioLink>
             <div className="studio-sidebar-bottom">
               <StudioLink route="resources" onNavigate={navigate} aria-label="模板与指南" title="模板与指南" className={`studio-overview-link ${route === 'resources' ? 'is-active' : ''}`} aria-current={route === 'resources' ? 'page' : undefined}><BookOpen size={17} /> 模板与指南</StudioLink>
-              <Button variant="outline" className="studio-quota-card" type="button" onClick={() => { setAccountError(''); setAccountPrompt(true) }}><span>{unlimited ? '会员导出权益' : '可用导出额度'} <ArrowRight size={14} /></span><strong>{unlimited ? '不限次' : visibleQuota.total_remaining}{!unlimited && <small> 次</small>}</strong><p>{unlimited ? '次数包与奖励余额保留' : accountSession ? '查看账户与额度明细' : '每日免费额度 · 登录领取奖励'}</p></Button>
+              <Button variant="outline" className="studio-quota-card" type="button" onClick={() => { setAccountError(''); setAccountPrompt(true) }}><span>{!accountSession ? '登录后导出' : unlimited ? '会员导出权益' : '可用导出额度'} <ArrowRight size={14} /></span><strong>{!accountSession ? '登录' : unlimited ? '不限次' : visibleQuota.total_remaining}{accountSession && !unlimited && <small> 次</small>}</strong><p>{unlimited ? '次数包与奖励余额保留' : accountSession ? '查看账户与额度明细' : '编辑预览免费 · 导出需登录'}</p></Button>
               <p className="studio-sidebar-note"><ShieldCheck size={13} /> 本地创作 · 隐私优先</p>
             </div>
           </aside>
@@ -811,8 +828,8 @@ function App() {
             {route === 'home' && <div className="studio-page-scroll"><ToolHome onNavigate={navigate} hasDraft={hasMessages} promotion={<RewardPromotion session={accountSession} refreshKey={`${accountPrompt}:${shareOpen}`} onShare={() => setShareOpen(true)} onAccount={() => { setAccountError(''); setAccountPrompt(true); }} />} /></div>}
             {route === 'resources' && <main className="studio-page-scroll studio-resources"><StudioLink route="home" onNavigate={navigate} className="studio-back-link"><ArrowLeft size={15} /> 返回工具概览</StudioLink><h1>模板与使用指南</h1><p className="studio-page-description">挑选一个示例，在独立工作页中继续编辑。</p><GrowthContent onUseTemplate={handleUseTemplate} onOpenEditor={() => { setChatSection('content'); navigate('chat'); }} /><footer className="analytics-note">创作内容和图片在本地处理；主动分享同款时，对话文字会写入分享链接。账号服务保存邮箱、验证和额度 / 邀请记录，访问统计使用匿名标识。</footer></main>}
             {isWorking && <h1 className="studio-work-title sr-only">{workspaceTools.find(tool => tool.id === activeTool)?.title}</h1>}
-            <div className="studio-tool-page" hidden={route !== 'batch'}><BatchStudio currentChat={{ users, messages, settings, selfId }} remaining={visibleQuota.total_remaining} unlimited={unlimited} onDebit={debitBatchExport} onComplete={id => {
-              if (batchOwners.current.get(id) !== 'guest') completeExport(id);
+            <div className="studio-tool-page" hidden={route !== 'batch'}><BatchStudio currentChat={{ users, messages, settings, selfId }} loggedIn={!!accountSession} onRequireLogin={ensureExportLogin} remaining={visibleQuota.total_remaining} unlimited={unlimited} onDebit={debitBatchExport} onComplete={id => {
+              completeExport(id);
               void trackProductEvent('image_exported', { capture_mode: 'standard', tool: 'batch' });
             }} /></div>
             <div className="studio-tool-page" hidden={route !== 'chat'} id="editor" ref={editorRef}>

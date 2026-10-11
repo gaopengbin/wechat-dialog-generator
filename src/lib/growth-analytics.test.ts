@@ -2,6 +2,15 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { measureGrowthRequest, growthReason } from './growth-analytics'
 import { sendProductEnvelope } from './product-analytics'
+test('request trace joins phases and telemetry failure cannot break login', async()=>{
+  const trace={request_id:'a'.repeat(32),stage:'sending'}
+  const events: Record<string,string>[]=[]
+  await measureGrowthRequest('login',async()=>{trace.stage='response_received';return 'ok'},(_name,p)=>{events.push({...p})},trace)
+  assert.equal(events[0].request_id,events[1].request_id)
+  assert.equal(events[0].stage,'sending')
+  assert.equal(events[1].stage,'response_received')
+  assert.equal(await measureGrowthRequest('login',async()=> 'ok',()=>{throw Error('telemetry unavailable')}),'ok')
+})
 test('email acceptance and API success remain distinct, without form values', async () => {
   const events: unknown[] = []
   const emit = (name: string, properties: Record<string,string> = {}) => { events.push({name,properties}) }

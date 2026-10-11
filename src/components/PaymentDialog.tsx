@@ -3,7 +3,7 @@ import { Dialog } from '@base-ui/react/dialog'
 import { CreditCard, ExternalLink, RefreshCw, X } from 'lucide-react'
 import { Button } from './ui/button'
 import { assertExportIdentity, captureExportIdentity, isExportIdentityCurrent, createPaymentOrder, getPaymentOrders, getPaymentProducts, refreshPaymentOrder, resumePaymentOrder, restoreAccount, type AccountSession, type ExportQuota, type PaymentOrder, type PaymentProduct, type PaymentCampaign } from '@/lib/account-api'
-import { paymentError, paymentIntentKey, reserveCheckoutWindow, safeCheckoutUrl } from '@/lib/payment-ui'
+import { paymentError, paymentIntentKey, paymentWindowExpired, reserveCheckoutWindow, safeCheckoutUrl } from '@/lib/payment-ui'
 import './PaymentDialog.css'
 
 const states = { pending: '待付款 / 待确认', paid: '已支付 · 已到账', closed: '已关闭', refunding: '退款处理中', refunded: '已退款' }
@@ -24,6 +24,8 @@ export function PaymentDialog({ session, onClose, onAccount, onQuota }: {
   const [notice, setNotice] = useState('')
   const [checkout, setCheckout] = useState<{ id: string; url: string } | null>(null)
   const lock = useRef(false)
+  const clockOffset = useRef(0)
+  const [clock, setClock] = useState(Date.now)
   const identity = useRef(captureExportIdentity(session)).current
   const onQuotaRef = useRef(onQuota)
   useEffect(() => { onQuotaRef.current = onQuota }, [onQuota])
@@ -31,19 +33,22 @@ export function PaymentDialog({ session, onClose, onAccount, onQuota }: {
   const load = useCallback(async () => {
     const [catalog, history, account] = await Promise.all([getPaymentProducts(), userId ? getPaymentOrders(identity) : Promise.resolve({ orders: [] }), userId ? restoreAccount() : Promise.resolve(null)])
     assertExportIdentity(identity)
+    const serverNow = history.orders.find(order => order.server_now)?.server_now || catalog.campaign?.server_now
+    if (serverNow) clockOffset.current = Date.parse(serverNow) - Date.now()
+    setClock(Date.now() + clockOffset.current)
     setProducts(catalog.products); setAvailable(catalog.available); setOrders(history.orders); setLoaded(true)
     setCampaign(catalog.campaign || null)
     // An authenticated backend history response can retire only the exact known order.
     // Missing/ambiguous create responses deliberately keep their retry key.
     if (userId) for (const order of history.orders) {
-      if (!['paid', 'closed', 'refunded'].includes(order.state)) continue
+      if (!['paid', 'closed', 'refunded'].includes(order.state) && !order.checkout_expired) continue
       const key = paymentIntentKey(userId, order.product_id)
       if (sessionStorage.getItem(`${key}:order`) === order.id) {
         sessionStorage.removeItem(key); sessionStorage.removeItem(`${key}:order`)
       }
     }
     if (account?.user.id === userId && account) onQuotaRef.current(account.user.id, account.quota)
-    setCheckout(current => current && history.orders.some(order => order.id === current.id && order.state === 'pending') ? current : null)
+    setCheckout(current => current && history.orders.some(order => order.id === current.id && order.state === 'pending' && !paymentWindowExpired(order, Date.now() + clockOffset.current)) ? current : null)
   }, [userId, identity])
   const run = useCallback(async (operation: () => Promise<void>) => {
     if (lock.current) return
@@ -53,6 +58,15 @@ export function PaymentDialog({ session, onClose, onAccount, onQuota }: {
   }, [identity])
   useEffect(() => { void run(load) }, [load, run])
   useEffect(() => {
+    const timer = setInterval(() => setClock(Date.now() + clockOffset.current), 1000)
+    return () => clearInterval(timer)
+  }, [])
+  useEffect(() => {
+    if (!orders.some(order => order.state === 'pending')) return
+    const timer = setInterval(() => { if (!document.hidden) void run(load) }, 30000)
+    return () => clearInterval(timer)
+  }, [orders, load, run])
+  useEffect(() => {
     if (!campaign?.active) return
     const delay = Math.max(1000, Math.min(60000, Date.parse(campaign.ends_at) - Date.parse(campaign.server_now) + 100))
     const timer = setInterval(() => void run(load), delay)
@@ -61,6 +75,8 @@ export function PaymentDialog({ session, onClose, onAccount, onQuota }: {
 
   async function prepare(product: PaymentProduct) {
     if (!session?.user.email_verified_at || !available || !loaded || product.purchasable === false) return
+    const existing = orders.find(order => order.state === 'pending' && order.product_id === product.id && !paymentWindowExpired(order, clock))
+    if (existing) { await resume(existing); return }
     await run(async () => {
       const popup = reserveCheckoutWindow()
       try {
@@ -76,10 +92,10 @@ export function PaymentDialog({ session, onClose, onAccount, onQuota }: {
         setNotice(popup.navigate(result.checkout_url) ? '已自动打开支付宝收银台，付款后请回到此页点击“查询到账”。' : '浏览器未能自动打开收银台，请点击“打开支付宝收银台”；付款后查询到账，不要重复下单。')
       } else {
         popup.close()
-        setNotice(`订单状态：${states[result.state]}，请刷新核对余额。`)
+        setNotice(result.checkout_expired && result.state === 'pending' ? '原订单已过期，正在核对支付结果。若尚未付款，可重新选择套餐。' : `订单状态：${states[result.state]}，请刷新核对余额。`)
         const checked = await refreshPaymentOrder(result.order_id, identity)
         if (isExportIdentityCurrent(identity)) onQuota(session.user.id, checked.quota)
-        if (checked.state !== 'pending') { sessionStorage.removeItem(key); sessionStorage.removeItem(`${key}:order`) }
+        if (checked.state !== 'pending' || checked.checkout_expired) { sessionStorage.removeItem(key); sessionStorage.removeItem(`${key}:order`) }
       }
       await load()
       } finally { popup.close() }
@@ -91,13 +107,15 @@ export function PaymentDialog({ session, onClose, onAccount, onQuota }: {
       const result = await refreshPaymentOrder(order.id, identity)
       assertExportIdentity(identity)
       onQuota(userId, result.quota)
-      setOrders(current => current.map(item => item.id === order.id ? { ...item, state: result.state } : item))
-      if (result.state !== 'pending') {
+      setOrders(current => current.map(item => item.id === order.id ? { ...item, ...result } : item))
+      if (result.state !== 'pending' || result.checkout_expired) {
         setCheckout(current => current?.id === order.id ? null : current)
-        sessionStorage.removeItem(paymentIntentKey(userId, order.product_id))
-        sessionStorage.removeItem(`${paymentIntentKey(userId, order.product_id)}:order`)
+        const key = paymentIntentKey(userId, order.product_id)
+        if (sessionStorage.getItem(`${key}:order`) === order.id) {
+          sessionStorage.removeItem(key); sessionStorage.removeItem(`${key}:order`)
+        }
       }
-      setNotice(result.state === 'paid' ? '支付已确认，充值额度已同步到账。' : result.state === 'pending' ? '暂未确认付款。若已支付，请稍后再查询，不要重复付款。' : `订单状态：${states[result.state]}`)
+      setNotice(result.state === 'paid' ? '支付已确认，充值额度已同步到账。' : result.state === 'pending' ? result.checkout_expired ? '订单已过期，支付结果仍在核对；若已付款请勿重复购买，尚未付款可选择新套餐。' : '暂未确认付款。若已支付，请稍后再查询，不要重复付款。' : `订单状态：${states[result.state]}`)
     })
   }
   async function resume(order: PaymentOrder) {
@@ -110,7 +128,7 @@ export function PaymentDialog({ session, onClose, onAccount, onQuota }: {
       if (result.state === 'pending' && result.checkout_url) {
         setCheckout({ id: order.id, url: safeCheckoutUrl(result.checkout_url) })
         setNotice(popup.navigate(result.checkout_url) ? '已恢复原订单收银台并自动打开，不会新建订单。付款后请回到此页查询到账。' : '已恢复原订单收银台，但浏览器未能自动打开。请点击“打开支付宝收银台”，无需重新下单。')
-      } else { popup.close(); setNotice(`订单状态：${states[result.state]}，请刷新核对余额。`); await load() }
+      } else { popup.close(); setNotice(result.checkout_expired && result.state === 'pending' ? '原订单已过期，不能继续付款。若尚未付款，请重新选择套餐。' : `订单状态：${states[result.state]}，请刷新核对余额。`); await load() }
       } finally { popup.close() }
     })
   }
@@ -121,7 +139,7 @@ export function PaymentDialog({ session, onClose, onAccount, onQuota }: {
     <div className="payment-price"><strong>{money(product.amount_fen)}</strong>{campaign?.active && product.regular_amount_fen && <span>计划常规价 {money(product.regular_amount_fen)}</span>}</div>
     <p>{product.kind === 'membership' ? `${product.duration_days === 1 ? '24 小时' : `${product.duration_days} 天`}内不限导出次数` : `${product.credits} 次导出 · 不设到期日`}</p>
     <small>{product.kind === 'membership' ? '包含批量制作 · 不自动续费' : '包含批量制作 · 按成功图片计次'}</small>
-    <Button disabled={busy || !session?.user.email_verified_at || pending || product.purchasable === false} onClick={() => void prepare(product)}>{product.purchasable === false ? '暂时停售' : product.kind === 'membership' ? `购买${product.subject}` : `购买 ${product.credits} 次`}</Button>
+    <Button disabled={busy || !loaded || !available || !session?.user.email_verified_at || product.purchasable === false} onClick={() => void prepare(product)}>{product.purchasable === false ? '暂时停售' : orders.some(order => order.state === 'pending' && order.product_id === product.id && !paymentWindowExpired(order, clock)) ? '继续此套餐付款' : product.kind === 'membership' ? `购买${product.subject}` : `购买 ${product.credits} 次`}</Button>
   </article>
   return <Dialog.Root open onOpenChange={open => { if (!open && !busy) onClose() }}>
     <Dialog.Portal><Dialog.Backdrop className="payment-backdrop" /><Dialog.Popup className="payment-dialog">
@@ -137,10 +155,10 @@ export function PaymentDialog({ session, onClose, onAccount, onQuota }: {
         {loaded && !available && <p className="payment-muted">支付宝充值暂未开放，暂时不能创建新订单。已有订单仍可查询。</p>}
         {available && campaign?.active && <div className="payment-launch"><strong>限时首发优惠 · 30 天</strong><span>截至 {date(campaign.ends_at)}（北京时间）</span><small>活动结束后按计划常规价销售；受收款限额影响的套餐届时暂停购买。</small></div>}
         {available && <><section aria-label="导出次数套餐" className="payment-products">{products.filter(p => p.id !== 'member-day').map(productCard)}</section>{products.some(p => p.id === 'member-day') && <><Button variant="ghost" size="sm" aria-expanded={showDay} aria-controls="payment-day-product" onClick={() => setShowDay(value => !value)}>{showDay ? '收起临时使用套餐' : '只用一天？查看 24 小时日卡'}</Button>{showDay && <section id="payment-day-product" aria-label="临时使用套餐" className="payment-products payment-day">{products.filter(p => p.id === 'member-day').map(productCard)}</section>}</>}</>}
-        {pending && <p className="payment-muted">已有待确认订单，已付款请查询到账；尚未付款可点击“继续付款”恢复原收银台，请勿重复下单。</p>}
-        {checkout && <div className="payment-checkout"><a href={checkout.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={16} /> 打开支付宝收银台</a><p>收款方与金额请以收银台为准。打开收银台不代表付款成功。</p></div>}
+        {pending && <p className="payment-muted">订单付款有效期为 15 分钟，继续付款不会延长。同套餐有效订单会复用，过期订单不影响重新选择；如已付款，请先查询到账，避免重复购买。</p>}
+        {checkout && !orders.some(order => order.id === checkout.id && paymentWindowExpired(order, clock)) && <div className="payment-checkout"><a href={checkout.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={16} /> 打开支付宝收银台</a><p>收款方与金额请以收银台为准。打开收银台不代表付款成功。</p></div>}
         {notice && <p role="status" className="payment-notice">{notice}</p>}
-        <section className="payment-orders"><h3>充值订单 <span>最近 50 笔</span></h3>{loaded && !orders.length && <p className="payment-muted">暂无充值订单。</p>}{orders.map(order => <article key={order.id}><div><strong>{money(order.amount_fen)} · {order.kind === 'membership' ? order.subject || `${order.duration_days} 天会员` : `${order.credits} 次`}</strong><span>{states[order.state]}</span></div><small>{new Date(order.created_at).toLocaleString('zh-CN')}</small><code>{order.id}</code>{order.state === 'pending' && <div className="payment-order-actions"><Button variant="outline" size="sm" disabled={busy} onClick={() => void check(order)}>查询到账</Button>{available && session?.user.email_verified_at && <Button variant="ghost" size="sm" disabled={busy} onClick={() => void resume(order)}>继续付款</Button>}</div>}</article>)}</section>
+        <section className="payment-orders"><h3>充值订单 <span>最近 50 笔</span></h3>{loaded && !orders.length && <p className="payment-muted">暂无充值订单。</p>}{orders.map(order => <article key={order.id}><div><strong>{money(order.amount_fen)} · {order.kind === 'membership' ? order.subject || `${order.duration_days} 天会员` : `${order.credits} 次`}</strong><span>{order.state === 'pending' && paymentWindowExpired(order, clock) ? '已过期 · 支付结果核对中' : states[order.state]}</span></div><small>{date(order.created_at)}</small>{order.state === 'pending' && order.expires_at && <small>付款截止：{date(order.expires_at)}（北京时间）</small>}<code>{order.id}</code>{order.state === 'pending' && <div className="payment-order-actions"><Button variant="outline" size="sm" disabled={busy} onClick={() => void check(order)}>查询到账</Button>{available && session?.user.email_verified_at && !paymentWindowExpired(order, clock) && <Button variant="ghost" size="sm" disabled={busy} onClick={() => void resume(order)}>继续付款</Button>}</div>}</article>)}</section>
         <p className="payment-muted">会员从支付确认起计时，续购日／月／年卡均顺延现有会员到期时间，不自动续费。会员期间不扣免费、奖励和次数包额度；到期后按免费、奖励、次数包顺序使用。权益覆盖本地创作与批量导出，不包含未来另行收费的 AI 或云服务。</p>
         <p className="payment-muted">订单或退款问题请联系公众号「老高 Vibe Coding」，提供订单号，不要发送密码或密钥。会员退款需人工核对使用情况。</p>
       </div>

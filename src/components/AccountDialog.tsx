@@ -24,6 +24,8 @@ export function AccountDialog({ open, session, busy, error, onClose: closeParent
   const [emailError, setEmailError] = useState('')
   const emailInput = useRef<HTMLInputElement>(null)
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [capsLock, setCapsLock] = useState(false)
   const [displayName, setDisplayName] = useState('')
   const [code, setCode] = useState('')
   const [challenge, setChallenge] = useState('')
@@ -40,7 +42,7 @@ export function AccountDialog({ open, session, busy, error, onClose: closeParent
   const formMode = session ? session.user.email_verified_at ? 'account' : 'bind' : mode
   const viewedMode = useRef('')
   useEffect(() => {
-    if (!open) { viewedMode.current = ''; return }
+    if (!open) { viewedMode.current = ''; setShowPassword(false); setCapsLock(false); return }
     if (viewedMode.current !== formMode) { viewedMode.current = formMode; trackGrowthEvent('account_form_viewed', { mode: formMode }) }
   }, [open, formMode])
   const onClose = useCallback(() => { trackGrowthEvent('account_form_closed', { mode: formMode }); closeParent() }, [closeParent, formMode])
@@ -141,11 +143,13 @@ export function AccountDialog({ open, session, busy, error, onClose: closeParent
         <form className="account-form" onSubmit={event => void submit(event)}>
           {mode === 'register' && <label>昵称<input autoComplete="nickname" value={displayName} disabled={locked} onChange={event => setDisplayName(event.target.value)} required maxLength={32} /></label>}
           {mode === 'login' ? emailField : verificationFields}
-          <label>{mode === 'reset' ? '新密码' : '密码'}<input type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} value={password} disabled={locked} onChange={event => setPassword(event.target.value)} placeholder="8–72 个字符" required minLength={8} maxLength={72} /></label>
+          <label>{mode === 'reset' ? '新密码' : '密码'}<span className="account-code-row"><input type={showPassword ? 'text' : 'password'} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} value={password} disabled={locked} onChange={event => setPassword(event.target.value)} onKeyDown={event => setCapsLock(event.getModifierState('CapsLock'))} onKeyUp={event => setCapsLock(event.getModifierState('CapsLock'))} onBlur={() => setCapsLock(false)} placeholder="8–72 个字符" required minLength={8} maxLength={72} /><Button variant="outline" disabled={locked} aria-label={showPassword ? '隐藏密码' : '显示密码'} aria-pressed={showPassword} onClick={() => setShowPassword(value => !value)}>{showPassword ? '隐藏' : '显示'}</Button></span></label>
+          {capsLock && <p className="account-field-error" role="status">大写锁定已开启，请确认密码大小写。</p>}
+          {mode === 'login' && visibleError && <div className="account-code-row" aria-label="登录帮助"><Button variant="outline" disabled={locked} onClick={() => { changeMode('register'); setShowPassword(false) }}>首次使用？去注册</Button><Button variant="ghost" disabled={locked} onClick={() => { changeMode('reset'); setShowPassword(false) }}>忘记密码？找回</Button></div>}
           {feedback}<button className="account-primary-button" disabled={locked || (mode !== 'login' && !challenge)}>{busy ? '请稍候…' : mode === 'login' ? '登录' : mode === 'reset' ? '更新密码' : '验证并注册 · 领取 20 次'}</button>
         </form>
-        {mode === 'login' && <button className="account-text-button" disabled={locked} onClick={() => changeMode('reset')}>忘记密码？</button>}
-        {mode !== 'register' && <Button variant="outline" className="account-secondary-button" disabled={locked} onClick={() => changeMode('register')}>首次使用？去注册</Button>}
+        {mode === 'login' && !visibleError && <button className="account-text-button" disabled={locked} onClick={() => { changeMode('reset'); setShowPassword(false) }}>忘记密码？</button>}
+        {mode !== 'register' && !(mode === 'login' && visibleError) && <Button variant="outline" className="account-secondary-button" disabled={locked} onClick={() => { changeMode('register'); setShowPassword(false) }}>首次使用？去注册</Button>}
         {mode === 'reset' && <p className="account-intro">收不到邮件？确认填写的是注册邮箱并检查垃圾邮件。老账号未验证且忘记密码，请联系公众号「老高 Vibe Coding」核实，不要反复获取验证码。</p>}
         <p className="account-privacy">验证码 5 分钟有效、只能使用一次。我们不索取你的验证码。</p>
       </>}

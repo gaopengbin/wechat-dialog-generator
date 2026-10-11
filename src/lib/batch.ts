@@ -123,19 +123,23 @@ export async function runBatch(jobs: BatchJob[], deps: {
   update: () => void
   complete: (id: string) => void
   result?: (job: BatchJob) => void
+  failure?: (job: BatchJob, error: unknown, stage: 'render' | 'authorize') => void
 }) {
   for (const job of jobs.filter(j => j.selected && j.state !== 'done')) {
     if (deps.cancelled()) break
     job.state = 'working'; job.error = undefined; deps.update()
+    let stage: 'render' | 'authorize' = 'render'
     try {
       const bytes = await deps.render(job)
       if (deps.cancelled()) { job.state = 'ready'; deps.update(); break }
       job.locked = true
+      stage = 'authorize'
       await deps.debit(job.id)
       job.bytes = bytes; job.state = 'done'; deps.update()
       // Reward confirmation/telemetry must not turn a charged, cached image into a retry.
       try { deps.complete(job.id) } catch { /* Image remains available for download. */ }
     } catch (error) {
+      try { deps.failure?.(job, error, stage) } catch { /* Diagnostic failure is isolated. */ }
       job.state = 'error'; job.error = error instanceof Error ? error.message : '生成失败，请重试'; deps.update()
       // On debit uncertainty, stop the queue rather than issuing more potentially charged requests.
       if (job.locked) break

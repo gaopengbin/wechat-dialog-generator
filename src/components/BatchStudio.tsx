@@ -18,7 +18,8 @@ import { BATCH_CHAT_EXAMPLE } from '@/lib/batch-prompt'
 import { beginExportLog } from '@/lib/export-log'
 import './BatchStudio.css'
 
-export function BatchStudio({ remaining, unlimited = false, onDebit, onComplete, currentChat }: {
+export function BatchStudio({ remaining, unlimited = false, onDebit, onComplete, currentChat, loggedIn, onRequireLogin }: {
+  loggedIn: boolean; onRequireLogin: () => boolean;
   remaining: number; unlimited?: boolean; onDebit: (id: string) => Promise<void>; onComplete: (id: string) => void; currentChat: ChatSnapshot
 }) {
   const [text, setText] = useState(BATCH_CHAT_EXAMPLE)
@@ -62,6 +63,7 @@ export function BatchStudio({ remaining, unlimited = false, onDebit, onComplete,
     } catch (e) { updateJob(active.id, { error: e instanceof Error ? e.message : '解析失败', state: 'error' }) }
   }
   async function generate() {
+    if (!onRequireLogin()) return;
     if (running.current || !selected.length) return
     if (!pending.length) { download(); return }
     if (!confirmed) return
@@ -70,7 +72,13 @@ export function BatchStudio({ remaining, unlimited = false, onDebit, onComplete,
       await runBatch(jobs, { render: async job => {
         if (job.dirty) throw new Error('对话已修改，请先更新本组预览。')
         return renderBatchChat(job)
-      }, debit: onDebit, cancelled: () => stop.current, update: () => setJobs([...jobs]), complete: onComplete })
+      }, debit: onDebit, cancelled: () => stop.current, update: () => setJobs([...jobs]), complete: onComplete,
+        failure: (job, error, stage) => {
+          const log = beginExportLog({ tool: 'batch', mode: job.mode })
+          log.stage(stage)
+          void log.finish('failed', '批量单图导出失败', error)
+        },
+      })
       const unfinished = jobs.filter(j => j.selected && j.state !== 'done').length
       const note = unfinished ? `${stop.current ? '已停止后续任务，' : ''}${unfinished} 组未完成，可在原队列查看原因并重试。` : ''
       if (jobs.some(j => j.selected && j.state === 'done' && j.bytes)) download(note)
@@ -81,6 +89,7 @@ export function BatchStudio({ remaining, unlimited = false, onDebit, onComplete,
     } finally { running.current = false; setBusy(false); setConfirmed(false) }
   }
   function download(note = '') {
+    if (!onRequireLogin()) return;
     const files = jobs.flatMap((j, index) => j.selected && j.state === 'done' && j.bytes ? [{ name: cardFilename(index, j.content.title), bytes: j.bytes }] : [])
     if (!files.length) return
     const filename = `聊天截图_${files.length}组.zip`
@@ -90,7 +99,7 @@ export function BatchStudio({ remaining, unlimited = false, onDebit, onComplete,
       link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 60000)
       void log.finish('download_requested', note || '重复下载不扣额度')
       setMessage(`已发起 ZIP 下载，包含 ${files.length} 张聊天图。${note}若浏览器拦截下载，请点击“重新下载已完成 ZIP”，不再扣额度。`)
-    } catch { void log.finish('failed', 'ZIP 打包或下载操作失败'); setMessage('打包失败，图片仍保留在本页。请减少勾选后重试，不会重复扣费。') }
+    } catch (error) { log.stage('zip'); void log.finish('failed', 'ZIP 打包或下载操作失败', error); setMessage('打包失败，图片仍保留在本页。请减少勾选后重试，不会重复扣费。') }
   }
   const locked = busy || !!active?.locked
   const preview = active?.snapshot ? <div className="batch-chat-preview">
@@ -99,7 +108,7 @@ export function BatchStudio({ remaining, unlimited = false, onDebit, onComplete,
   const exportActions = <div className="batch-export" aria-label="聊天预览与导出">
     <div className="batch-progress"><span>已完成 <strong>{successes.length} / {jobs.length}</strong> 组{failed.length ? ` · ${failed.length} 待重试` : ''}</span><span>{unlimited ? '会员不限次' : <>可用 <strong>{remaining}</strong> 次</>}</span><Progress max={Math.max(jobs.length, 1)} value={successes.length} aria-label="批量生成进度" className="batch-progress-bar" /></div>
     <p>已选 {selected.length} 组，{unlimited ? '会员有效期内不扣次数包及奖励额度。' : <>本轮最多使用 <strong>{pending.length} 次</strong>额度。</>}</p>
-    {!unlimited && pending.length > remaining && <p className="batch-error">额度不足以完成全部任务，请减少勾选或补充额度。原编号重试仍可进行。</p>}
+    {!loggedIn ? <Button variant="outline" onClick={onRequireLogin}>登录后导出 · 编辑内容保留</Button> : !unlimited && pending.length > remaining && <p className="batch-error">额度不足以完成全部任务，请减少勾选或补充额度。原编号重试仍可进行。</p>}
     <label className="batch-confirm"><Checkbox checked={confirmed} disabled={busy || !pending.length} onCheckedChange={setConfirmed} aria-label={unlimited ? '确认导出所选聊天图片' : '确认按聊天图片张数使用额度'} /> {unlimited ? '确认导出所选聊天图片' : '我确认本批按聊天图片张数使用额度'}</label>
     <div className="batch-actions batch-export-actions">{busy ? <Button variant="outline" onClick={() => { stop.current = true }}><Square size={15} /> 停止后续任务</Button> : <Button disabled={!selected.length || (!!pending.length && !confirmed)} onClick={() => void generate()}>{pending.length && failed.length ? <RotateCcw size={16} /> : <Download size={16} />}{!pending.length && selected.length ? '重新下载已完成 ZIP' : failed.length ? '重试并导出 ZIP' : '导出所选 ZIP'}</Button>}{pending.length > 0 && selected.some(j => j.state === 'done') && <Button variant="outline" disabled={busy} onClick={() => download()}><Download size={16} /> 重新下载已完成 ZIP</Button>}</div>
     <p className="batch-export-note">一键生成并自动下载。未完成项保留，重新下载不扣额度。</p>

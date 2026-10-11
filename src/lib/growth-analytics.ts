@@ -15,14 +15,15 @@ export function growthReason(error: unknown) {
 export function trackGrowthEvent(event: GrowthEvent, properties: Record<string, string> = {}) {
   void trackProductEvent(event, properties)
 }
-export async function measureGrowthRequest<T>(action: string, operation: () => Promise<T>, emit = trackGrowthEvent) {
-  emit('account_request', { action, outcome: 'started', reason: 'none' })
+export async function measureGrowthRequest<T>(action: string, operation: () => Promise<T>, emit = trackGrowthEvent, trace: Record<string,string> = {}) {
+  const report = (outcome: string, reason: string) => { try { emit('account_request', { action, outcome, reason, ...trace }) } catch { /* Telemetry cannot block authentication. */ } }
+  report('started', 'none')
   try {
     const result = await operation()
-    emit('account_request', { action, outcome: action.startsWith('code_') ? 'accepted' : 'succeeded', reason: 'none' })
+    report(action.startsWith('code_') ? 'accepted' : 'succeeded', 'none')
     return result
   } catch (error) {
-    emit('account_request', { action, outcome: 'failed', reason: growthReason(error) })
+    report('failed', growthReason(error))
     throw error
   }
 }

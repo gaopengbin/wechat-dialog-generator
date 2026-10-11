@@ -13,6 +13,7 @@ type EventName = GrowthEvent
   | 'page_view'
   | 'dialog_created'
   | 'image_exported'
+  | 'export_failed'
   | 'project_created'
   | 'project_reopened'
   | 'project_duplicated'
@@ -97,7 +98,7 @@ export async function trackProductEvent(event: EventName, properties: Properties
         occurred_at: new Date().toISOString(),
         visitor_id: identifier(localStorage, visitorStorageKey),
         session_id: identifier(sessionStorage, sessionStorageKey),
-        properties: { ...(/^(promotion_|share_dialog_|share_action$|account_|invite_landing_)/.test(event) ? {} : acquisition()), ...properties },
+        properties: { ...(/^(export_failed$|promotion_|share_dialog_|share_action$|account_|invite_landing_)/.test(event) ? {} : acquisition()), ...properties },
       }],
     }
     await sendProductEnvelope(endpoint, payload)

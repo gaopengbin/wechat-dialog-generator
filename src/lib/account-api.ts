@@ -6,7 +6,6 @@ const apiRoot = import.meta.env.VITE_ACCOUNT_API_ENDPOINT ||
     : 'http://127.0.0.1:9092/platform-api/v1')
 
 const tokenStorageKey = 'wechat-dialog-generator:account-token'
-const guestUsageStorageKey = 'wechat-dialog-generator:guest-export-usage'
 const authenticatedCredentials = new Map<string, string>()
 export type ExportIdentity = { userId: string | null; credential: string }
 export function captureExportIdentity(session: AccountSession | null): ExportIdentity {
@@ -17,6 +16,11 @@ export function isExportIdentityCurrent(identity: ExportIdentity) {
 }
 export function assertExportIdentity(identity: ExportIdentity) {
   if (!isExportIdentityCurrent(identity)) throw new AccountApiError(409, 'account_changed', '登录状态已变化，操作已停止。请刷新账户状态后，在原账号重试。')
+}
+
+export function requireExportLogin(identity: ExportIdentity) {
+  if (!identity.userId || !identity.credential) throw new AccountApiError(401, 'login_required', '请先登录后导出，编辑内容和预览会保留。')
+  assertExportIdentity(identity)
 }
 
 export interface AccountUser {
@@ -69,9 +73,12 @@ function request<T>(path: string, options: RequestInit = {}, credential?: string
     const purpose = JSON.parse(String(options.body || '{}')).purpose
     if (['register', 'bind', 'reset'].includes(purpose)) action = `code_${purpose}`
   }
-  return action ? measureGrowthRequest(action, () => rawRequest<T>(path, options, credential)) : rawRequest<T>(path, options, credential)
+  if (!action) return rawRequest<T>(path, options, credential)
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  const trace = { request_id: Array.from(bytes, b => b.toString(16).padStart(2, '0')).join(''), stage: 'sending' }
+  return measureGrowthRequest(action, () => rawRequest<T>(path, options, credential, trace), undefined, trace)
 }
-async function rawRequest<T>(path: string, options: RequestInit = {}, credential?: string) {
+async function rawRequest<T>(path: string, options: RequestInit = {}, credential?: string, trace?: { request_id: string; stage: string }) {
   if (credential !== undefined) assertExportIdentity({ userId: null, credential })
   const sessionToken = credential ?? token()
   try {
@@ -83,14 +90,18 @@ async function rawRequest<T>(path: string, options: RequestInit = {}, credential
           ...(options.body ? { 'content-type': 'application/json' } : {}),
           ...(sessionToken ? { authorization: `Bearer ${sessionToken}` } : {}),
           ...options.headers,
+          ...(trace ? { 'x-client-request-id': trace.request_id } : {}),
         },
       })
+      if (trace) trace.stage = 'headers_received'
       const payload = await response.json().catch(error => {
         if (signal.aborted) throw error
+        if (response.ok) throw new Error('服务响应不完整，请重试')
         return {}
       }) as T & {
         error?: { code?: string; message?: string }
       }
+      if (trace) trace.stage = 'response_received'
       if (!response.ok) {
         throw new AccountApiError(
           response.status,
@@ -101,8 +112,9 @@ async function rawRequest<T>(path: string, options: RequestInit = {}, credential
       return payload
     }, 20000, options.signal)
   } catch (error) {
-    if (error instanceof TypeError) throw new TypeError('暂时无法连接服务，请检查网络后重试。')
-    throw error
+    const failure = error instanceof TypeError ? new TypeError('暂时无法连接服务，请检查网络后重试。') : error
+    if (trace && failure instanceof Error) failure.message += `（排查编号：${trace.request_id}）`
+    throw failure
   }
 }
 
@@ -156,7 +168,8 @@ export async function logoutAccount() {
 }
 
 export async function consumeAccountExport(action_id: string = crypto.randomUUID(), identity?: ExportIdentity) {
-  if (identity) assertExportIdentity(identity)
+  if (!token()) throw new AccountApiError(401, 'login_required', '请先登录后导出，编辑内容和预览会保留。')
+  if (identity) requireExportLogin(identity)
   const result = await request<{ consumed: boolean; source: string; quota: ExportQuota }>('/quota/consume', {
     method: 'POST',
     body: JSON.stringify({ action_id }),
@@ -168,13 +181,14 @@ const post = <T>(path: string, body: object) => request<T>(path, { method: 'POST
 export type PaymentProduct = { id: string; amount_fen: number; credits: number; subject: string; kind?: 'credits' | 'membership'; duration_days?: number; regular_amount_fen?: number; purchasable?: boolean }
 export type PaymentCampaign = { active: boolean; starts_at: string; ends_at: string; server_now: string }
 export type PaymentState = 'pending' | 'paid' | 'closed' | 'refunding' | 'refunded'
-export type PaymentOrder = { id: string; product_id: string; amount_fen: number; credits: number; state: PaymentState; created_at: string; paid_at: string | null; kind?: 'credits' | 'membership'; duration_days?: number; subject?: string }
+export type PaymentTiming = { expires_at?: string; checkout_expired?: boolean; server_now?: string }
+export type PaymentOrder = PaymentTiming & { id: string; product_id: string; amount_fen: number; credits: number; state: PaymentState; created_at: string; paid_at: string | null; kind?: 'credits' | 'membership'; duration_days?: number; subject?: string }
 export const getPaymentProducts = () => request<{ available: boolean; products: PaymentProduct[]; campaign?: PaymentCampaign | null }>('/payments/products')
 const paymentPost = <T>(path: string, body: object, identity?: ExportIdentity) => request<T>(path, { method: 'POST', body: JSON.stringify(body) }, identity?.credential)
 export const getPaymentOrders = (identity?: ExportIdentity) => request<{ orders: PaymentOrder[] }>('/payments/orders', {}, identity?.credential)
-export const createPaymentOrder = (product_id: string, request_id: string, expected_amount_fen?: number, identity?: ExportIdentity) => paymentPost<{ order_id: string; state: PaymentState; checkout_url?: string }>('/payments/orders', { product_id, request_id, ...(expected_amount_fen === undefined ? {} : { expected_amount_fen }) }, identity)
-export const refreshPaymentOrder = (order_id: string, identity?: ExportIdentity) => paymentPost<{ order_id: string; state: PaymentState; quota: ExportQuota }>('/payments/refresh', { order_id }, identity)
-export const resumePaymentOrder = (order_id: string, identity?: ExportIdentity) => paymentPost<{ order_id: string; state: PaymentState; checkout_url?: string }>('/payments/checkout', { order_id }, identity)
+export const createPaymentOrder = (product_id: string, request_id: string, expected_amount_fen?: number, identity?: ExportIdentity) => paymentPost<PaymentTiming & { order_id: string; state: PaymentState; checkout_url?: string }>('/payments/orders', { product_id, request_id, ...(expected_amount_fen === undefined ? {} : { expected_amount_fen }) }, identity)
+export const refreshPaymentOrder = (order_id: string, identity?: ExportIdentity) => paymentPost<PaymentTiming & { order_id: string; state: PaymentState; quota: ExportQuota }>('/payments/refresh', { order_id }, identity)
+export const resumePaymentOrder = (order_id: string, identity?: ExportIdentity) => paymentPost<PaymentTiming & { order_id: string; state: PaymentState; checkout_url?: string }>('/payments/checkout', { order_id }, identity)
 export const requestEmailCode = (email: string, purpose: 'register' | 'bind' | 'reset') => post<{ challenge_id: string; retry_after: number; message: string }>('/auth/email-code', { email, purpose })
 export const verifyAccountEmail = (email: string, challenge_id: string, code: string) => post<AccountSession & { granted: number }>('/auth/email/verify', { email, challenge_id, code })
 export const resetAccountPassword = (email: string, password: string, challenge_id: string, code: string) => post<{ ok: boolean }>('/auth/password/reset', { email, password, challenge_id, code })
@@ -205,38 +219,13 @@ export async function redeemFollowBonus(code: string) {
   })
 }
 
-function localDay() {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-}
-
-export function guestQuota(): ExportQuota {
-  const day = localDay()
-  let used = 0
-  try {
-    const stored = JSON.parse(localStorage.getItem(guestUsageStorageKey) ?? '{}') as { day?: string; used?: number }
-    if (stored.day === day) used = Math.max(0, Math.min(10, Number(stored.used) || 0))
-  } catch {
-    used = 0
-  }
-  const tomorrow = new Date()
-  tomorrow.setHours(24, 0, 0, 0)
+export function loggedOutQuota(): ExportQuota {
   return {
-    daily_limit: 10,
-    daily_used: used,
-    daily_remaining: 10 - used,
+    daily_limit: 0,
+    daily_used: 0,
+    daily_remaining: 0,
     bonus_remaining: 0,
-    total_remaining: 10 - used,
-    resets_at: tomorrow.toISOString(),
+    total_remaining: 0,
+    resets_at: '',
   }
-}
-
-export function consumeGuestExport() {
-  const current = guestQuota()
-  if (current.daily_remaining <= 0) {
-    throw new AccountApiError(402, 'quota_exhausted', '今日 10 次免费导出额度已用完，登录后可继续领取额度')
-  }
-  const next = current.daily_used + 1
-  localStorage.setItem(guestUsageStorageKey, JSON.stringify({ day: localDay(), used: next }))
-  return guestQuota()
 }
