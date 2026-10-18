@@ -22,6 +22,7 @@ import { ShareDialog } from '@/components/ShareDialog';
 import { BatchStudio } from '@/components/BatchStudio';
 import { ExportLogPage } from '@/components/ExportLogPage';
 import { beginExportLog, exportLogError } from '@/lib/export-log';
+import { createExportReceiptQueue, createReceiptStore } from '@/lib/export-receipts';
 import { WorkspacePanels } from '@/components/WorkspacePanels';
 import { StudioLink, ToolHome } from '@/components/ToolHome';
 import { workspaceTools } from '@/lib/workspace-tools';
@@ -414,13 +415,58 @@ function App() {
     finally { setAccountBusy(false); }
   }, [showToast]);
   const exportIdentities = useRef(new Map<string, ExportIdentity>());
+  const [receiptQueue] = useState(() => createExportReceiptQueue({
+    store: createReceiptStore(() => localStorage),
+    identity: () => {
+      const identity = captureExportIdentity(accountSessionRef.current);
+      return identity.userId && isExportIdentityCurrent(identity)
+        ? { userId: identity.userId, credential: identity.credential } : null;
+    },
+    confirm: completeAccountExport,
+    online: () => navigator.onLine,
+    onPending: () => showToast('图片已生成，成功记录待同步；联网后会自动重试，不会重复扣额度。'),
+    onAuthRequired: () => {
+      setAccountError('图片已生成，请重新登录原账号以同步成功记录，不会重复扣额度。');
+      setAccountPrompt(true);
+    },
+    onRejected: () => showToast('图片已生成，但成功记录无法确认；请保留本地导出日志联系反馈，不要重复导出。'),
+    onStorageUnavailable: () => showToast('浏览器禁止保存待同步记录，请保持页面打开，联网后自动重试。'),
+  }));
+  useEffect(() => {
+    let restoring = false;
+    const resume = () => {
+      void receiptQueue.flush();
+      // A reload while offline may not have restored the account yet.
+      if ((!accountSessionRef.current || !isExportIdentityCurrent(captureExportIdentity(accountSessionRef.current))) && !restoring) {
+        restoring = true;
+        void restoreAccount().then(session => {
+          if (session) { setAccountSession(session); setVisibleQuota(session.quota); }
+        }).catch(() => {}).finally(() => { restoring = false; });
+      }
+    };
+    const visible = () => { if (document.visibilityState === 'visible') resume(); };
+    receiptQueue.start();
+    window.addEventListener('online', resume);
+    window.addEventListener('focus', resume);
+    window.addEventListener('storage', resume);
+    document.addEventListener('visibilitychange', visible);
+    return () => {
+      receiptQueue.stop();
+      window.removeEventListener('online', resume);
+      window.removeEventListener('focus', resume);
+      window.removeEventListener('storage', resume);
+      document.removeEventListener('visibilitychange', visible);
+    };
+  }, [receiptQueue]);
+  useEffect(() => { void receiptQueue.flush(); }, [accountSession, receiptQueue]);
   const completeExport = useCallback((ticket: string | boolean | undefined) => {
     if (typeof ticket === 'string') {
       const identity = exportIdentities.current.get(ticket);
-      if (!identity || !isExportIdentityCurrent(identity)) return;
-      void completeAccountExport(ticket, identity).catch(() => showToast('图片已生成，但奖励确认失败；请稍后再次导出以重试邀请结算'));
+      if (!identity?.userId) return;
+      receiptQueue.enqueue(ticket, identity.userId);
+      exportIdentities.current.delete(ticket);
     }
-  }, [showToast]);
+  }, [receiptQueue]);
 
   const applyExportQuota = useCallback((identity: ExportIdentity, quota: ExportQuota) => {
     if (!isExportIdentityCurrent(identity) || (accountSessionRef.current?.user.id ?? null) !== identity.userId) return;
@@ -707,6 +753,7 @@ function App() {
       log.stage('authorize');
       const ticket = await authorizeExport();
       if (!ticket) { void log.finish('cancelled', '额度校验未通过'); return; }
+      log.action(ticket);
       log.stage('encode');
       const link = document.createElement('a');
       link.download = filename;
@@ -716,6 +763,7 @@ function App() {
       void log.finish('download_requested');
       completeExport(ticket);
       void trackProductEvent('image_exported', {
+        ...(typeof ticket === 'string' ? { action_id: ticket } : {}),
         capture_mode: 'standard',
         message_count_bucket: messageCountBucket(messages.length),
         tool: 'chat',
@@ -742,11 +790,13 @@ function App() {
           log.stage('authorize');
       const ticket = await authorizeExport();
           if (!ticket) { void log.finish('cancelled', '额度校验未通过'); return; }
+          log.action(ticket);
           log.stage('clipboard');
           await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
           void log.finish('copied');
           completeExport(ticket);
           void trackProductEvent('image_exported', {
+            ...(typeof ticket === 'string' ? { action_id: ticket } : {}),
             capture_mode: 'clipboard',
             message_count_bucket: messageCountBucket(messages.length),
             tool: 'chat',
@@ -775,6 +825,7 @@ function App() {
       log.stage('authorize');
       const ticket = await authorizeExport();
       if (!ticket) { void log.finish('cancelled', '额度校验未通过'); return; }
+      log.action(ticket);
       log.stage('encode');
       const link = document.createElement('a');
       link.download = filename;
@@ -784,6 +835,7 @@ function App() {
       void log.finish('download_requested');
       completeExport(ticket);
       void trackProductEvent('image_exported', {
+        ...(typeof ticket === 'string' ? { action_id: ticket } : {}),
         capture_mode: 'long',
         message_count_bucket: messageCountBucket(messages.length),
         tool: 'chat',
@@ -830,7 +882,7 @@ function App() {
             {isWorking && <h1 className="studio-work-title sr-only">{workspaceTools.find(tool => tool.id === activeTool)?.title}</h1>}
             <div className="studio-tool-page" hidden={route !== 'batch'}><BatchStudio currentChat={{ users, messages, settings, selfId }} loggedIn={!!accountSession} onRequireLogin={ensureExportLogin} remaining={visibleQuota.total_remaining} unlimited={unlimited} onDebit={debitBatchExport} onComplete={id => {
               completeExport(id);
-              void trackProductEvent('image_exported', { capture_mode: 'standard', tool: 'batch' });
+              void trackProductEvent('image_exported', { action_id: id, capture_mode: 'standard', tool: 'batch' });
             }} /></div>
             <div className="studio-tool-page" hidden={route !== 'chat'} id="editor" ref={editorRef}>
               <WorkspacePanels previewTitle="聊天效果预览" previewDescription="可滚动查看消息 · 导出宽度 1125px" preview={<PhonePreview users={users} messages={messages} settings={settings} selfId={selfId} phoneRef={phoneRef} onUpdateMessage={handleUpdateMessage} />}
@@ -850,10 +902,10 @@ function App() {
               </WorkspacePanels>
             </div>
             <div className="studio-tool-page" hidden={route !== 'moments'}><MomentsEditor onToast={showToast} onBeforeExport={authorizeExport} onExportSuccess={ticket => {
-              completeExport(ticket); void trackProductEvent('image_exported', { capture_mode: 'standard', tool: 'moments' }); promptAfterExport();
+              completeExport(ticket); void trackProductEvent('image_exported', { ...(typeof ticket === 'string' ? { action_id: ticket } : {}), capture_mode: 'standard', tool: 'moments' }); promptAfterExport();
             }} /></div>
             {(['payment', 'redpacket', 'profile', 'group'] as const).map(kind => <div className="studio-tool-page" key={kind} hidden={route !== kind}><WechatSceneEditor kind={kind} onToast={showToast} onBeforeExport={authorizeExport} onExportSuccess={ticket => {
-              completeExport(ticket); void trackProductEvent('image_exported', { capture_mode: 'standard', tool: kind }); promptAfterExport();
+              completeExport(ticket); void trackProductEvent('image_exported', { ...(typeof ticket === 'string' ? { action_id: ticket } : {}), capture_mode: 'standard', tool: kind }); promptAfterExport();
             }} /></div>)}
           </div>
         </div>

@@ -75,6 +75,7 @@ export function BatchStudio({ remaining, unlimited = false, onDebit, onComplete,
       }, debit: onDebit, cancelled: () => stop.current, update: () => setJobs([...jobs]), complete: onComplete,
         failure: (job, error, stage) => {
           const log = beginExportLog({ tool: 'batch', mode: job.mode })
+          log.action(job.id)
           log.stage(stage)
           void log.finish('failed', '批量单图导出失败', error)
         },

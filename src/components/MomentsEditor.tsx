@@ -127,6 +127,7 @@ export function MomentsEditor({ onToast, onBeforeExport, onExportSuccess }: Mome
       log.stage('authorize');
       const ticket = onBeforeExport ? await onBeforeExport() : true
       if (!ticket) { void log.finish('cancelled', '额度校验未通过'); return }
+      log.action(ticket)
       log.stage('encode');
       const link = document.createElement('a')
       link.download = filename

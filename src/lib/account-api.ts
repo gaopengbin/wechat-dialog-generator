@@ -75,7 +75,8 @@ function request<T>(path: string, options: RequestInit = {}, credential?: string
   }
   if (!action) return rawRequest<T>(path, options, credential)
   const bytes = crypto.getRandomValues(new Uint8Array(16))
-  const trace = { request_id: Array.from(bytes, b => b.toString(16).padStart(2, '0')).join(''), stage: 'sending' }
+  const trace = { request_id: Array.from(bytes, b => b.toString(16).padStart(2, '0')).join(''), stage: 'sending',
+    ...(path === '/quota/complete' ? { action_id: String(JSON.parse(String(options.body || '{}')).action_id) } : {}) }
   return measureGrowthRequest(action, () => rawRequest<T>(path, options, credential, trace), undefined, trace)
 }
 async function rawRequest<T>(path: string, options: RequestInit = {}, credential?: string, trace?: { request_id: string; stage: string }) {
@@ -85,6 +86,7 @@ async function rawRequest<T>(path: string, options: RequestInit = {}, credential
     return await withRequestTimeout(async signal => {
       const response = await fetch(`${apiRoot}${path}`, {
         ...options,
+        ...(path === '/quota/complete' ? { keepalive: true } : {}),
         signal,
         headers: {
           ...(options.body ? { 'content-type': 'application/json' } : {}),
@@ -201,7 +203,8 @@ export const revokeInvite = (code: string) => post('/growth/revoke', { code })
 export const visitInvite = (code: string) => post('/growth/visit', { code })
 export const completeAccountExport = (action_id: string, identity?: ExportIdentity) => {
   if (identity) assertExportIdentity(identity)
-  return request('/quota/complete', { method: 'POST', body: JSON.stringify({ action_id }) }, identity?.credential)
+  return request<{ ok: boolean }>('/quota/complete', { method: 'POST', body: JSON.stringify({ action_id }) }, identity?.credential)
+    .then(result => { if (result?.ok !== true) throw new Error('导出确认响应不完整'); return result })
 }
 export function pendingInvite() {
   try {

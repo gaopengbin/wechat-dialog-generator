@@ -17,6 +17,7 @@ export interface ExportLog {
   finishedAt?: string
   outcome: ExportOutcome
   note: string
+  actionId?: string
 }
 export const exportOutcomes: Record<ExportOutcome, string> = {
   pending: '结果未确认', generated: '已生成', download_requested: '已发起下载', copied: '已复制', failed: '失败', cancelled: '未导出',
@@ -65,6 +66,9 @@ export function createExportLogger(write: (record: ExportLog) => Promise<unknown
     let stage: ExportStage = 'render'
     return {
       id: record.id,
+      action(ticket: string | boolean | undefined) {
+        if (!finished && typeof ticket === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(ticket)) record.actionId = ticket
+      },
       stage(value: ExportStage) { stage = value },
       finish(outcome: Exclude<ExportOutcome, 'pending'>, note = '', error?: unknown) {
         if (finished) return tail
@@ -75,6 +79,7 @@ export function createExportLogger(write: (record: ExportLog) => Promise<unknown
           // Independent of IndexedDB; synchronous and async reporter failures are isolated.
           void Promise.resolve().then(() => report({
             diagnostic_id: record.id, tool: record.tool, capture_mode: record.mode,
+            ...(record.actionId ? { action_id: record.actionId } : {}),
             stage, reason, browser: browserFamily(typeof navigator === 'undefined' ? '' : navigator.userAgent),
           })).catch(() => {})
         }
