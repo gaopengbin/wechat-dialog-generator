@@ -138,7 +138,7 @@ export function AccountDialog({ open, session, busy, error, onClose: closeParent
         <p className="account-security"><ShieldCheck size={15} /> 创作内容留在本机，账号同步邮箱和额度。</p>
         <button className="account-secondary-button" type="button" disabled={locked} onClick={() => void onLogout()}><LogOut size={15} /> 退出登录</button>
       </> : <>
-        <p className="account-intro">{mode === 'login' ? '首次使用请先注册。已注册账号使用邮箱和密码登录。' : mode === 'reset' ? '仅向已注册并验证的邮箱发送重置验证码；没有注册过，请先注册。' : '每日 10 次免费导出，验证邮箱完成注册后额外赠 20 次。'}</p>
+        <p className="account-intro">{mode === 'login' ? '首次使用请先注册。已注册账号使用邮箱和密码登录。' : mode === 'reset' ? '使用注册邮箱接收验证码并设置新密码。旧账号无需提前验证邮箱或人工授权。' : '每日 10 次免费导出，验证邮箱完成注册后额外赠 20 次。'}</p>
         <div className="account-tabs"><button className={mode === 'login' ? 'is-active' : ''} disabled={locked} type="button" onClick={() => changeMode('login')}>登录</button><button className={mode === 'register' ? 'is-active' : ''} disabled={locked} type="button" onClick={() => changeMode('register')}>注册</button></div>
         <form className="account-form" onSubmit={event => void submit(event)}>
           {mode === 'register' && <label>昵称<input autoComplete="nickname" value={displayName} disabled={locked} onChange={event => setDisplayName(event.target.value)} required maxLength={32} /></label>}
@@ -150,7 +150,7 @@ export function AccountDialog({ open, session, busy, error, onClose: closeParent
         </form>
         {mode === 'login' && !visibleError && <button className="account-text-button" disabled={locked} onClick={() => { changeMode('reset'); setShowPassword(false) }}>忘记密码？</button>}
         {mode !== 'register' && !(mode === 'login' && visibleError) && <Button variant="outline" className="account-secondary-button" disabled={locked} onClick={() => { changeMode('register'); setShowPassword(false) }}>首次使用？去注册</Button>}
-        {mode === 'reset' && <p className="account-intro">收不到邮件？确认填写的是注册邮箱并检查垃圾邮件。老账号未验证且忘记密码，请联系公众号「老高 Vibe Coding」核实，不要反复获取验证码。</p>}
+        {mode === 'reset' && <p className="account-intro">收不到邮件？确认填写的是注册邮箱并检查垃圾邮件，避免连续重复获取。找回成功后会同时完成邮箱验证；只有无法访问原邮箱时才需要联系公众号「老高 Vibe Coding」。</p>}
         <p className="account-privacy">验证码 5 分钟有效、只能使用一次。我们不索取你的验证码。</p>
       </>}
     </section>

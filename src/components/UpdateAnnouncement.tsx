@@ -33,9 +33,9 @@ export function UpdateAnnouncement({ blocked = false }: { blocked?: boolean }) {
         <Dialog.Description className="announcement-description">这次更新，重点优化注册、登录和找回密码的提示，让你更顺利地开始创作。</Dialog.Description>
         <div className="announcement-body">
           <section><UserRound size={18} /><div><h3>首次使用，先注册</h3><p>验证邮箱完成注册后，即可领取 <strong>20 次额外导出额度</strong>。</p></div></section>
-          <section><MailCheck size={18} /><div><h3>已有账号，直接登录</h3><p>使用注册邮箱和密码登录；忘记密码，可通过已验证的邮箱找回。收不到验证码时，请检查注册邮箱和垃圾邮件。</p></div></section>
+          <section><MailCheck size={18} /><div><h3>已有账号，直接登录</h3><p>使用注册邮箱和密码登录；忘记密码，新旧账号都可通过注册邮箱验证码自助找回，无需人工授权。收不到验证码时，请检查注册邮箱和垃圾邮件。</p></div></section>
           <section><ShieldCheck size={18} /><div><h3>原有内容与额度不受影响</h3><p>账号、创作内容和剩余额度保留，每日 <strong>10 次免费导出</strong>继续提供。</p></div></section>
-          <div className="announcement-support"><p>仍然遇到问题？联系公众号「老高 Vibe Coding」，提供操作步骤与报错截图。</p><p>旧账号未验证邮箱且忘记密码，需要人工核实。请勿发送密码或验证码。</p></div>
+          <div className="announcement-support"><p>仍然遇到问题？联系公众号「老高 Vibe Coding」，提供操作步骤与报错截图。</p><p>旧账号可通过邮箱验证码自助找回；无法访问原邮箱时再联系支持。请勿向他人提供密码或验证码。</p></div>
         </div>
         <footer className="announcement-footer"><p>关闭后不再自动弹出，可从顶部“公告”重新查看。</p><Dialog.Close render={<Button />}>我知道了</Dialog.Close></footer>
       </Dialog.Popup>
