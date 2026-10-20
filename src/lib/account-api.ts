@@ -172,11 +172,25 @@ export async function logoutAccount() {
 export async function consumeAccountExport(action_id: string = crypto.randomUUID(), identity?: ExportIdentity) {
   if (!token()) throw new AccountApiError(401, 'login_required', '请先登录后导出，编辑内容和预览会保留。')
   if (identity) requireExportLogin(identity)
-  const result = await request<{ consumed: boolean; source: string; quota: ExportQuota }>('/quota/consume', {
+  const reserve = () => request<{ reserved: boolean; quota: ExportQuota }>('/quota/reserve', {
     method: 'POST',
     body: JSON.stringify({ action_id }),
   }, identity?.credential)
+  let result
+  try { result = await reserve() }
+  catch (error) {
+    if (error instanceof AccountApiError && error.status > 0 && ![408,429].includes(error.status) && error.status < 500) throw error
+    // Lost acknowledgements replay the same operation ID, not a new reservation.
+    result = await reserve()
+  }
   return { quota: result.quota, action_id }
+}
+
+export function releaseAccountExport(action_id: string, identity: ExportIdentity) {
+  assertExportIdentity(identity)
+  return request<{ released: boolean; quota: ExportQuota }>('/quota/release', {
+    method: 'POST', body: JSON.stringify({ action_id }),
+  }, identity.credential)
 }
 
 const post = <T>(path: string, body: object) => request<T>(path, { method: 'POST', body: JSON.stringify(body) })
@@ -203,7 +217,7 @@ export const revokeInvite = (code: string) => post('/growth/revoke', { code })
 export const visitInvite = (code: string) => post('/growth/visit', { code })
 export const completeAccountExport = (action_id: string, identity?: ExportIdentity) => {
   if (identity) assertExportIdentity(identity)
-  return request<{ ok: boolean }>('/quota/complete', { method: 'POST', body: JSON.stringify({ action_id }) }, identity?.credential)
+  return request<{ ok: boolean; quota?: ExportQuota }>('/quota/complete', { method: 'POST', body: JSON.stringify({ action_id }) }, identity?.credential)
     .then(result => { if (result?.ok !== true) throw new Error('导出确认响应不完整'); return result })
 }
 export function pendingInvite() {

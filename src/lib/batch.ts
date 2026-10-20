@@ -115,6 +115,21 @@ function crc32(bytes: Uint8Array) {
 }
 
 export type BatchJob = { id: string; content: ChatContent; mode: CaptureMode; snapshot?: ChatSnapshot; selected: boolean; state: 'ready' | 'working' | 'done' | 'error'; locked?: boolean; dirty?: boolean; error?: string; bytes?: Uint8Array }
+
+export async function deliverBatch(jobs: BatchJob[], deps: {
+  reserve: (id: string) => Promise<void>; deliver: () => void; complete: (id: string) => void;
+  failed: (id: string, error: unknown) => void;
+}) {
+  const ready = jobs.filter(j => j.selected && j.state === 'done' && j.bytes)
+  try {
+    for (const job of ready) await deps.reserve(job.id) // renew the same IDs; never charge here
+    deps.deliver()
+  } catch (error) {
+    for (const job of ready) try { deps.failed(job.id, error) } catch { /* expiry releases any remaining holds */ }
+    throw error
+  }
+  for (const job of ready) try { deps.complete(job.id) } catch { /* cached data must stay downloadable */ }
+}
 // A failed/ambiguous debit keeps the same id for retry; rendered successes stay cached.
 export async function runBatch(jobs: BatchJob[], deps: {
   render: (job: BatchJob) => Promise<Uint8Array>

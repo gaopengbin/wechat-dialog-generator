@@ -16,7 +16,6 @@ export interface ReceiptStore {
 }
 const prefix = 'wechat-toolbox:export-receipt:v1:'
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i
-const key = (item: Pick<ExportReceipt, 'userId' | 'actionId'>) => prefix + encodeURIComponent(item.userId) + ':' + item.actionId
 function valid(item: ExportReceipt) {
   return item && typeof item.userId === 'string' && item.userId.length > 0 && item.userId.length <= 128 &&
     typeof item.actionId === 'string' && uuid.test(item.actionId) &&
@@ -24,7 +23,8 @@ function valid(item: ExportReceipt) {
     Number.isFinite(item.nextAttemptAt) && [undefined, 'auth', 'invalid'].includes(item.blocked)
 }
 
-export function createReceiptStore(storage: () => Storage): ReceiptStore {
+export function createReceiptStore(storage: () => Storage, namespace = prefix): ReceiptStore {
+  const key = (item: Pick<ExportReceipt, 'userId' | 'actionId'>) => namespace + encodeURIComponent(item.userId) + ':' + item.actionId
   const memory = new Map<string, ExportReceipt>()
   const removed = new Set<string>()
   return {
@@ -34,7 +34,7 @@ export function createReceiptStore(storage: () => Storage): ReceiptStore {
         const disk = storage()
         for (let i = 0; i < disk.length; i++) {
           const name = disk.key(i)
-          if (!name?.startsWith(prefix) || removed.has(name)) continue
+          if (!name?.startsWith(namespace) || removed.has(name)) continue
           try {
             const item = JSON.parse(disk.getItem(name) || 'null') as ExportReceipt
             if (valid(item) && name === key(item)) items.set(name, item)

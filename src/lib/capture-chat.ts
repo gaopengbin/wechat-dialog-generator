@@ -1,11 +1,12 @@
 import { toCanvas } from 'html-to-image';
+import { renderFailure } from './export-diagnostics';
 
 // Shared by the existing single-chat editor and batch exports.
 export async function captureChatPhone(phone: HTMLDivElement, longshot = false): Promise<HTMLCanvasElement | null> {
     const content = phone.closest('.wc-phone-content') as HTMLElement | null;
     const wrap = phone.closest('.wc-phone-wrap') as HTMLElement | null;
     const scaleWrap = phone.closest('.wc-phone-scale-wrap') as HTMLElement | null;
-    if (!content || !wrap) return null;
+    if (!content || !wrap) throw Object.assign(new Error('聊天预览未就绪，请重新打开工作页。'), { exportReason: 'preview_missing', renderStep: 'preview' });
 
     // 保存原始样式
     const saved = {
@@ -79,7 +80,10 @@ export async function captureChatPhone(phone: HTMLDivElement, longshot = false):
         height: totalH,
         pixelRatio: 1,
         backgroundColor: '#ededed',
+        onImageErrorHandler: () => { throw renderFailure(new Event('error'), 'asset_embed'); },
       });
+    } catch (error) {
+      throw renderFailure(error);
     } finally {
       // 还原所有样式
       content.style.transform = saved.ct; content.style.transformOrigin = saved.co;

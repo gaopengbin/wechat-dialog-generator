@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { exportReason, browserFamily } from './export-diagnostics'
+import { exportReason, exportDetails, renderFailure, browserFamily } from './export-diagnostics'
 import { createExportLogger } from './export-log'
 
 test('diagnostics never retain private exception content or user agent', () => {
@@ -8,6 +8,20 @@ test('diagnostics never retain private exception content or user agent', () => {
   assert.equal(exportReason(new Error('private chat')), 'unknown')
   assert.equal(exportReason(new DOMException('private', 'SecurityError')), 'security')
   assert.equal(browserFamily('Chrome/140.0 secret@example.com'), 'chrome-140')
+})
+
+test('renderer resource events, plain failures and missing preview have safe structured categories', () => {
+  const asset = renderFailure(new Event('error'), 'asset_embed')
+  assert.equal(exportReason(asset), 'resource_load')
+  assert.deepEqual(exportDetails(asset), { error_kind: 'resource_event', render_step: 'asset_embed' })
+  const raster = renderFailure(new Event('error'))
+  assert.equal(exportDetails(raster).render_step, 'svg_rasterize')
+  const privateError = renderFailure(new Error('secret chat https://private.test/file'))
+  assert.equal(exportReason(privateError), 'render_failed')
+  assert.doesNotMatch(JSON.stringify(exportDetails(privateError)), /secret|private/)
+  assert.equal(exportDetails(undefined).error_kind, 'missing_exception')
+  assert.equal(exportReason({ exportReason: 'preview_missing' }), 'preview_missing')
+  assert.equal(exportReason({ exportReason: 'private URL' }), 'unknown')
 })
 
 test('reserved action ID links failure diagnostics without exception content', async () => {

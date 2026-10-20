@@ -1,10 +1,11 @@
 import type { WechatTool } from './product-analytics'
 import { trackProductEvent } from './product-analytics'
-import { browserFamily, exportReason, type ExportStage } from './export-diagnostics'
+import { browserFamily, exportReason, exportDetails, type ExportStage } from './export-diagnostics'
 
 export const exportLogDatabase = 'wechat-toolbox-export-log'
 export const exportLogChanged = 'wechat-toolbox:export-log-changed'
 export const exportLogError = 'wechat-toolbox:export-log-error'
+export const exportRelease = 'wechat-toolbox:export-release'
 export type ExportOutcome = 'pending' | 'generated' | 'download_requested' | 'copied' | 'failed' | 'cancelled'
 export type ExportMode = 'standard' | 'long' | 'clipboard' | 'zip'
 export interface ExportLog {
@@ -73,14 +74,19 @@ export function createExportLogger(write: (record: ExportLog) => Promise<unknown
       finish(outcome: Exclude<ExportOutcome, 'pending'>, note = '', error?: unknown) {
         if (finished) return tail
         finished = true
+        if ((outcome === 'failed' || outcome === 'cancelled') && record.actionId && typeof window !== 'undefined') {
+          try { window.dispatchEvent(new CustomEvent(exportRelease, { detail: record.actionId })) } catch { /* Expiry frees the hold; no quota was debited. */ }
+        }
         if (outcome === 'failed') {
-          const reason = exportReason(error)
+          const classified = exportReason(error)
+          const reason = classified === 'unknown' && stage === 'render' ? 'render_failed' : classified
           note += ` [${stage}/${reason}; ${record.id}]`
           // Independent of IndexedDB; synchronous and async reporter failures are isolated.
           void Promise.resolve().then(() => report({
             diagnostic_id: record.id, tool: record.tool, capture_mode: record.mode,
             ...(record.actionId ? { action_id: record.actionId } : {}),
             stage, reason, browser: browserFamily(typeof navigator === 'undefined' ? '' : navigator.userAgent),
+            ...exportDetails(error),
           })).catch(() => {})
         }
         const result = { ...record, outcome, note, finishedAt: new Date().toISOString() }

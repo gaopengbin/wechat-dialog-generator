@@ -13,7 +13,7 @@ import { UserAvatarManager } from './UserAvatarManager'
 import { WorkspacePanels } from './WorkspacePanels'
 import { BatchPromptDialog } from './BatchPromptDialog'
 import { renderBatchChat } from './batch-chat-render'
-import { cardFilename, chatSnapshot, parseBatch, runBatch, zipImages, type BatchJob, type CaptureMode, type ChatSnapshot } from '@/lib/batch'
+import { cardFilename, chatSnapshot, parseBatch, runBatch, deliverBatch, zipImages, type BatchJob, type CaptureMode, type ChatSnapshot } from '@/lib/batch'
 import { BATCH_CHAT_EXAMPLE } from '@/lib/batch-prompt'
 import { beginExportLog } from '@/lib/export-log'
 import './BatchStudio.css'
@@ -33,6 +33,7 @@ export function BatchStudio({ remaining, unlimited = false, onDebit, onComplete,
   const [view, setView] = useState<'import' | 'edit'>('import')
   const [editSection, setEditSection] = useState<'content' | 'people' | 'settings'>('content')
   const stop = useRef(false), running = useRef(false)
+  const downloading = useRef(false), delivered = useRef(new Set<string>())
   const active = jobs.find(j => j.id === activeId)
   const selected = jobs.filter(j => j.selected), pending = selected.filter(j => j.state !== 'done')
   const successes = jobs.filter(j => j.state === 'done'), failed = jobs.filter(j => j.state === 'error')
@@ -65,14 +66,14 @@ export function BatchStudio({ remaining, unlimited = false, onDebit, onComplete,
   async function generate() {
     if (!onRequireLogin()) return;
     if (running.current || !selected.length) return
-    if (!pending.length) { download(); return }
+    if (!pending.length) { await download(); return }
     if (!confirmed) return
     running.current = true; stop.current = false; setBusy(true); setMessage('正在导出，完成后自动下载 ZIP，请保留此页。')
     try {
       await runBatch(jobs, { render: async job => {
         if (job.dirty) throw new Error('对话已修改，请先更新本组预览。')
         return renderBatchChat(job)
-      }, debit: onDebit, cancelled: () => stop.current, update: () => setJobs([...jobs]), complete: onComplete,
+      }, debit: onDebit, cancelled: () => stop.current, update: () => setJobs([...jobs]), complete: () => {},
         failure: (job, error, stage) => {
           const log = beginExportLog({ tool: 'batch', mode: job.mode })
           log.action(job.id)
@@ -82,25 +83,36 @@ export function BatchStudio({ remaining, unlimited = false, onDebit, onComplete,
       })
       const unfinished = jobs.filter(j => j.selected && j.state !== 'done').length
       const note = unfinished ? `${stop.current ? '已停止后续任务，' : ''}${unfinished} 组未完成，可在原队列查看原因并重试。` : ''
-      if (jobs.some(j => j.selected && j.state === 'done' && j.bytes)) download(note)
+      if (jobs.some(j => j.selected && j.state === 'done' && j.bytes)) await download(note)
       else {
         void beginExportLog({ tool: 'batch', mode: 'zip', count: selected.length }).finish(stop.current ? 'cancelled' : 'failed', '没有可下载的图片。' + note)
         setMessage('本次没有可下载的图片。' + note)
       }
     } finally { running.current = false; setBusy(false); setConfirmed(false) }
   }
-  function download(note = '') {
+  async function download(note = '') {
     if (!onRequireLogin()) return;
+    if (downloading.current) return
     const files = jobs.flatMap((j, index) => j.selected && j.state === 'done' && j.bytes ? [{ name: cardFilename(index, j.content.title), bytes: j.bytes }] : [])
     if (!files.length) return
+    downloading.current = true
     const filename = `聊天截图_${files.length}组.zip`
     const log = beginExportLog({ tool: 'batch', mode: 'zip', filename, count: files.length })
     try {
-      const url = URL.createObjectURL(zipImages(files)); const link = document.createElement('a')
-      link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 60000)
+      await deliverBatch(jobs, { reserve: onDebit, deliver: () => {
+        const url = URL.createObjectURL(zipImages(files)); const link = document.createElement('a')
+        link.href = url; link.download = filename
+        try { link.click() } finally { setTimeout(() => URL.revokeObjectURL(url), 60000) }
+      }, complete: id => {
+        if (!delivered.current.has(id)) { onComplete(id); delivered.current.add(id) }
+      }, failed: (id, error) => {
+        const failure = beginExportLog({ tool: 'batch', mode: 'zip' }); failure.action(id); failure.stage('zip')
+        void failure.finish('failed', 'ZIP 打包或下载操作失败', error)
+      } })
       void log.finish('download_requested', note || '重复下载不扣额度')
       setMessage(`已发起 ZIP 下载，包含 ${files.length} 张聊天图。${note}若浏览器拦截下载，请点击“重新下载已完成 ZIP”，不再扣额度。`)
     } catch (error) { log.stage('zip'); void log.finish('failed', 'ZIP 打包或下载操作失败', error); setMessage('打包失败，图片仍保留在本页。请减少勾选后重试，不会重复扣费。') }
+    finally { downloading.current = false }
   }
   const locked = busy || !!active?.locked
   const preview = active?.snapshot ? <div className="batch-chat-preview">

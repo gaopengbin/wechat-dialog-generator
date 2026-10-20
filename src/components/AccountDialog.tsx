@@ -134,7 +134,7 @@ export function AccountDialog({ open, session, busy, error, onClose: closeParent
         </section>
         {!session.user.email_verified_at && <form className="account-form" onSubmit={event => void submit(event)}><p className="account-intro">首次验证邮箱赠 20 次导出。原有账号、项目和额度全部保留；如原邮箱填错，可改为你能收信的邮箱。</p>{verificationFields}{feedback}<button className="account-primary-button" disabled={locked || !challenge}>验证邮箱并领取 20 次</button></form>}
         {session.user.email_verified_at && feedback}
-        <details className="account-rewards"><summary>奖励明细 · {rewards.length} 笔</summary>{rewards.length ? rewards.map((r, i) => <div key={i}><span>{({ email_verified: '邮箱验证', first_share: '首次有效分享', referral: '成功邀请' } as Record<string, string>)[r.kind] || r.kind}<small>{new Date(r.created_at).toLocaleString('zh-CN')}</small></span><strong>+{r.amount}</strong></div>) : <p>暂无本次活动奖励记录，历史公众号奖励仍计入余额。</p>}</details>
+        <details className="account-rewards"><summary>奖励明细 · {rewards.length} 笔</summary>{rewards.length ? rewards.map((r, i) => <div key={i}><span>{({ email_verified: '邮箱验证', first_share: '首次有效分享', referral: '成功邀请', export_compensation: '导出失败补偿' } as Record<string, string>)[r.kind] || r.kind}<small>{new Date(r.created_at).toLocaleString('zh-CN')}</small></span><strong>+{r.amount}</strong></div>) : <p>暂无本次活动奖励记录，历史公众号奖励仍计入余额。</p>}</details>
         <p className="account-security"><ShieldCheck size={15} /> 创作内容留在本机，账号同步邮箱和额度。</p>
         <button className="account-secondary-button" type="button" disabled={locked} onClick={() => void onLogout()}><LogOut size={15} /> 退出登录</button>
       </> : <>

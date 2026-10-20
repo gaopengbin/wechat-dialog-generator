@@ -1,7 +1,17 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { cardFilename, chatSnapshot, parseBatch, runBatch, zipImages, type BatchJob } from './batch'
+import { cardFilename, chatSnapshot, parseBatch, runBatch, deliverBatch, zipImages, type BatchJob } from './batch'
 import type { PhoneSettings } from '../types'
+
+test('batch ZIP failure cannot confirm or charge generated images; retry uses original IDs', async () => {
+  const jobs: BatchJob[] = ['one','two'].map(id => ({ id, content: { title: id, body: '我：你好' }, mode: 'standard', selected: true, state: 'done', bytes: new Uint8Array([1]) }))
+  const reserved: string[] = [], completed: string[] = [], released: string[] = []
+  const reserve = async (id: string) => { reserved.push(id) }, complete = (id: string) => { completed.push(id) }, failed = (id: string) => { released.push(id) }
+  await assert.rejects(deliverBatch(jobs, { reserve, complete, failed, deliver: () => { throw Error('zip failed') } }))
+  assert.deepEqual(completed, []); assert.deepEqual(released, ['one','two'])
+  await deliverBatch(jobs, { reserve, complete, failed, deliver: () => {} })
+  assert.deepEqual(reserved, ['one','two','one','two']); assert.deepEqual(completed, ['one','two'])
+})
 
 const aiMarkdownReply = `# 新版页面确认
 

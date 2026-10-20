@@ -21,7 +21,7 @@ import { UpdateAnnouncement } from '@/components/UpdateAnnouncement';
 import { ShareDialog } from '@/components/ShareDialog';
 import { BatchStudio } from '@/components/BatchStudio';
 import { ExportLogPage } from '@/components/ExportLogPage';
-import { beginExportLog, exportLogError } from '@/lib/export-log';
+import { beginExportLog, exportLogError, exportRelease } from '@/lib/export-log';
 import { createExportReceiptQueue, createReceiptStore } from '@/lib/export-receipts';
 import { WorkspacePanels } from '@/components/WorkspacePanels';
 import { StudioLink, ToolHome } from '@/components/ToolHome';
@@ -58,6 +58,7 @@ import {
   type ExportIdentity,
   verifyAccountEmail, pendingInvite, visitInvite, completeAccountExport,
   consumeAccountExport,
+  releaseAccountExport,
   loggedOutQuota, requireExportLogin,
   loginAccount,
   logoutAccount,
@@ -132,6 +133,7 @@ function App() {
   const [storageAvailable, setStorageAvailable] = useState(true);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const phoneRef = useRef<HTMLDivElement | null>(null);
+  const exportBusy = useRef(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const dialogTracked = useRef(false);
   const inviteLandingTracked = useRef(false);
@@ -422,7 +424,13 @@ function App() {
       return identity.userId && isExportIdentityCurrent(identity)
         ? { userId: identity.userId, credential: identity.credential } : null;
     },
-    confirm: completeAccountExport,
+    confirm: async (id, identity) => {
+      const result = await completeAccountExport(id, identity);
+      if (result.quota && isExportIdentityCurrent(identity) && accountSessionRef.current?.user.id === identity.userId) {
+        setVisibleQuota(result.quota);
+        setAccountSession(current => current?.user.id === identity.userId ? { ...current, quota: result.quota! } : current);
+      }
+    },
     online: () => navigator.onLine,
     onPending: () => showToast('图片已生成，成功记录待同步；联网后会自动重试，不会重复扣额度。'),
     onAuthRequired: () => {
@@ -432,10 +440,30 @@ function App() {
     onRejected: () => showToast('图片已生成，但成功记录无法确认；请保留本地导出日志联系反馈，不要重复导出。'),
     onStorageUnavailable: () => showToast('浏览器禁止保存待同步记录，请保持页面打开，联网后自动重试。'),
   }));
+  const [releaseQueue] = useState(() => createExportReceiptQueue({
+    store: createReceiptStore(() => localStorage, 'wechat-toolbox:export-release:v1:'),
+    identity: () => {
+      const identity = captureExportIdentity(accountSessionRef.current);
+      return identity.userId && isExportIdentityCurrent(identity) ? { userId: identity.userId, credential: identity.credential } : null;
+    },
+    confirm: releaseAccountExport,
+    online: () => navigator.onLine,
+  }));
+  useEffect(() => {
+    const release = (event: Event) => {
+      const id = (event as CustomEvent<string>).detail, identity = exportIdentities.current.get(id);
+      if (!identity?.userId) return;
+      releaseQueue.enqueue(id, identity.userId);
+      exportIdentities.current.delete(id);
+    };
+    window.addEventListener(exportRelease, release);
+    return () => window.removeEventListener(exportRelease, release);
+  }, [releaseQueue]);
   useEffect(() => {
     let restoring = false;
     const resume = () => {
       void receiptQueue.flush();
+      void releaseQueue.flush();
       // A reload while offline may not have restored the account yet.
       if ((!accountSessionRef.current || !isExportIdentityCurrent(captureExportIdentity(accountSessionRef.current))) && !restoring) {
         restoring = true;
@@ -446,19 +474,21 @@ function App() {
     };
     const visible = () => { if (document.visibilityState === 'visible') resume(); };
     receiptQueue.start();
+    releaseQueue.start();
     window.addEventListener('online', resume);
     window.addEventListener('focus', resume);
     window.addEventListener('storage', resume);
     document.addEventListener('visibilitychange', visible);
     return () => {
       receiptQueue.stop();
+      releaseQueue.stop();
       window.removeEventListener('online', resume);
       window.removeEventListener('focus', resume);
       window.removeEventListener('storage', resume);
       document.removeEventListener('visibilitychange', visible);
     };
-  }, [receiptQueue]);
-  useEffect(() => { void receiptQueue.flush(); }, [accountSession, receiptQueue]);
+  }, [receiptQueue, releaseQueue]);
+  useEffect(() => { void receiptQueue.flush(); void releaseQueue.flush(); }, [accountSession, receiptQueue, releaseQueue]);
   const completeExport = useCallback((ticket: string | boolean | undefined) => {
     if (typeof ticket === 'string') {
       const identity = exportIdentities.current.get(ticket);
@@ -743,7 +773,8 @@ function App() {
   }, []);
 
   const handleGenerateImage = useCallback(async () => {
-    if (!phoneRef.current) return;
+    if (!phoneRef.current || exportBusy.current) return;
+    exportBusy.current = true;
     const filename = '微信聊天记录_' + Date.now() + '.png';
     const log = beginExportLog({ tool: 'chat', mode: 'standard', filename });
     showToast('正在生成图片...');
@@ -773,18 +804,21 @@ function App() {
     } catch (e: unknown) {
       void log.finish('failed', '图片生成或下载操作失败', e);
       showToast('生成失败：' + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      exportBusy.current = false;
     }
   }, [showToast, capturePhone, messages.length, promptAfterExport, authorizeExport, completeExport]);
 
   const handleCopyImage = useCallback(async () => {
-    if (!phoneRef.current) return;
+    if (!phoneRef.current || exportBusy.current) return;
+    exportBusy.current = true;
     const log = beginExportLog({ tool: 'chat', mode: 'clipboard' });
     showToast('正在生成图片...');
     try {
       const canvas = await capturePhone(false);
       if (!canvas) { void log.finish('failed', '未能获取聊天预览'); return; }
       log.stage('encode');
-      canvas.toBlob(async (blob) => {
+      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve));
         if (!blob) { void log.finish('failed', '图片转换失败'); return; }
         try {
           log.stage('authorize');
@@ -807,15 +841,17 @@ function App() {
           void log.finish('failed', '图片复制失败，请检查剪贴板权限', error);
           showToast('复制失败，请使用下载功能');
         }
-      });
     } catch (error) {
       void log.finish('failed', '图片生成失败', error);
       showToast('操作失败');
+    } finally {
+      exportBusy.current = false;
     }
   }, [showToast, capturePhone, messages.length, promptAfterExport, authorizeExport, completeExport]);
 
   const handleGenerateLongImage = useCallback(async () => {
-    if (!phoneRef.current) return;
+    if (!phoneRef.current || exportBusy.current) return;
+    exportBusy.current = true;
     const filename = '微信聊天记录_长截图_' + Date.now() + '.png';
     const log = beginExportLog({ tool: 'chat', mode: 'long', filename });
     showToast('正在生成长截图...');
@@ -845,6 +881,8 @@ function App() {
     } catch (e: unknown) {
       void log.finish('failed', '长图生成或下载操作失败', e);
       showToast('生成失败：' + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      exportBusy.current = false;
     }
   }, [showToast, capturePhone, messages.length, promptAfterExport, authorizeExport, completeExport]);
 
