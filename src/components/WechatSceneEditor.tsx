@@ -80,7 +80,7 @@ const sceneDefinitions: Record<WechatSceneKind, {
 interface WechatSceneEditorProps {
   kind: WechatSceneKind
   onToast: (message: string) => void
-  onBeforeExport?: () => Promise<boolean | string>
+  onBeforeExport?: (actionId?: string) => Promise<boolean | string>
   onExportSuccess?: (ticket?: boolean | string) => void
 }
 
@@ -131,7 +131,7 @@ export function WechatSceneEditor({ kind, onToast, onBeforeExport, onExportSucce
     try {
       const canvas = await toCanvas(previewRef.current, { pixelRatio: 2, backgroundColor: '#f5f5f5' })
       log.stage('authorize');
-      const ticket = onBeforeExport ? await onBeforeExport() : true
+      const ticket = onBeforeExport ? await onBeforeExport(log.id) : true
       if (!ticket) { void log.finish('cancelled', '额度校验未通过'); return }
       log.action(ticket)
       log.stage('encode');

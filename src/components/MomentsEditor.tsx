@@ -16,7 +16,7 @@ import './SceneWorkspace.css'
 
 interface MomentsEditorProps {
   onToast: (message: string) => void
-  onBeforeExport?: () => Promise<boolean | string>
+  onBeforeExport?: (actionId?: string) => Promise<boolean | string>
   onExportSuccess?: (ticket?: boolean | string) => void
 }
 
@@ -125,7 +125,7 @@ export function MomentsEditor({ onToast, onBeforeExport, onExportSuccess }: Mome
         backgroundColor: '#ffffff',
       })
       log.stage('authorize');
-      const ticket = onBeforeExport ? await onBeforeExport() : true
+      const ticket = onBeforeExport ? await onBeforeExport(log.id) : true
       if (!ticket) { void log.finish('cancelled', '额度校验未通过'); return }
       log.action(ticket)
       log.stage('encode');

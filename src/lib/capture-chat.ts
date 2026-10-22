@@ -1,4 +1,4 @@
-import { toCanvas } from 'html-to-image';
+import { renderChatCanvas } from './capture-render';
 import { renderFailure } from './export-diagnostics';
 
 // Shared by the existing single-chat editor and batch exports.
@@ -75,13 +75,7 @@ export async function captureChatPhone(phone: HTMLDivElement, longshot = false):
     let canvas: HTMLCanvasElement | null = null;
     try {
       if (totalH > 16000) throw new Error('对话过长，请拆分为多组后导出（单图最高 16000 像素）。');
-      canvas = await toCanvas(phone, {
-        width: 1125,
-        height: totalH,
-        pixelRatio: 1,
-        backgroundColor: '#ededed',
-        onImageErrorHandler: () => { throw renderFailure(new Event('error'), 'asset_embed'); },
-      });
+      canvas = await renderChatCanvas(phone,1125,totalH);
     } catch (error) {
       throw renderFailure(error);
     } finally {

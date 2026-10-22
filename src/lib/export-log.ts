@@ -59,18 +59,22 @@ async function writeExportLog(record: ExportLog) {
 // Independent of analytics/account APIs: metadata stays in this browser. Log
 // failures never convert a successful export into a failed export or a retry.
 export function createExportLogger(write: (record: ExportLog) => Promise<unknown>, onError: () => void, report: (properties: Record<string, string>) => unknown = () => {}) {
-  return (input: Pick<ExportLog, 'tool' | 'mode'> & Partial<Pick<ExportLog, 'filename' | 'count'>>) => {
-    const record: ExportLog = { id: crypto.randomUUID(), tool: input.tool, mode: input.mode, filename: input.filename || '', count: input.count ?? 1, startedAt: new Date().toISOString(), outcome: 'pending', note: '' }
+  return (input: Pick<ExportLog, 'tool' | 'mode'> & Partial<Pick<ExportLog, 'filename' | 'count'>> & { reportFailure?: boolean }) => {
+    const id = crypto.randomUUID()
+    // Allocate correlation before rendering, not after authorization. An ID is
+    // not a debit: only quota/complete can commit a successful delivery.
+    const record: ExportLog = { id, actionId: id, tool: input.tool, mode: input.mode, filename: input.filename || '', count: input.count ?? 1, startedAt: new Date().toISOString(), outcome: 'pending', note: '' }
     const safelyWrite = (value: ExportLog) => Promise.resolve().then(() => write(value)).catch(() => { try { onError() } catch { /* reporting is best effort */ } })
     let tail = safelyWrite({ ...record })
     let finished = false
     let stage: ExportStage = 'render'
+    let quotaPhase = 'not_requested'
     return {
       id: record.id,
-      action(ticket: string | boolean | undefined) {
-        if (!finished && typeof ticket === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(ticket)) record.actionId = ticket
+      action(ticket: string | boolean | undefined, phase: 'not_requested' | 'reservation_requested' | 'reserved' = 'reserved') {
+        if (!finished && typeof ticket === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(ticket)) { record.actionId = ticket; quotaPhase = phase }
       },
-      stage(value: ExportStage) { stage = value },
+      stage(value: ExportStage) { stage = value; if (value === 'authorize') quotaPhase = 'reservation_requested' },
       finish(outcome: Exclude<ExportOutcome, 'pending'>, note = '', error?: unknown) {
         if (finished) return tail
         finished = true
@@ -82,9 +86,9 @@ export function createExportLogger(write: (record: ExportLog) => Promise<unknown
           const reason = classified === 'unknown' && stage === 'render' ? 'render_failed' : classified
           note += ` [${stage}/${reason}; ${record.id}]`
           // Independent of IndexedDB; synchronous and async reporter failures are isolated.
-          void Promise.resolve().then(() => report({
+          if (input.reportFailure !== false) void Promise.resolve().then(() => report({
             diagnostic_id: record.id, tool: record.tool, capture_mode: record.mode,
-            ...(record.actionId ? { action_id: record.actionId } : {}),
+            action_id: record.actionId!, quota_phase: quotaPhase, diagnostic_version: '2',
             stage, reason, browser: browserFamily(typeof navigator === 'undefined' ? '' : navigator.userAgent),
             ...exportDetails(error),
           })).catch(() => {})

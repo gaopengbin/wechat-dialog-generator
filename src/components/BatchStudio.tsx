@@ -76,7 +76,7 @@ export function BatchStudio({ remaining, unlimited = false, onDebit, onComplete,
       }, debit: onDebit, cancelled: () => stop.current, update: () => setJobs([...jobs]), complete: () => {},
         failure: (job, error, stage) => {
           const log = beginExportLog({ tool: 'batch', mode: job.mode })
-          log.action(job.id)
+          log.action(job.id, stage === 'authorize' ? 'reservation_requested' : 'not_requested')
           log.stage(stage)
           void log.finish('failed', '批量单图导出失败', error)
         },
@@ -85,7 +85,9 @@ export function BatchStudio({ remaining, unlimited = false, onDebit, onComplete,
       const note = unfinished ? `${stop.current ? '已停止后续任务，' : ''}${unfinished} 组未完成，可在原队列查看原因并重试。` : ''
       if (jobs.some(j => j.selected && j.state === 'done' && j.bytes)) await download(note)
       else {
-        void beginExportLog({ tool: 'batch', mode: 'zip', count: selected.length }).finish(stop.current ? 'cancelled' : 'failed', '没有可下载的图片。' + note)
+        // Per-image failures are already reported with stable job IDs. This
+        // local summary is not an additional render failure or billable action.
+        void beginExportLog({ tool: 'batch', mode: 'zip', count: selected.length, reportFailure: false }).finish(stop.current ? 'cancelled' : 'failed', '没有可下载的图片。' + note)
         setMessage('本次没有可下载的图片。' + note)
       }
     } finally { running.current = false; setBusy(false); setConfirmed(false) }
@@ -97,7 +99,7 @@ export function BatchStudio({ remaining, unlimited = false, onDebit, onComplete,
     if (!files.length) return
     downloading.current = true
     const filename = `聊天截图_${files.length}组.zip`
-    const log = beginExportLog({ tool: 'batch', mode: 'zip', filename, count: files.length })
+    const log = beginExportLog({ tool: 'batch', mode: 'zip', filename, count: files.length, reportFailure: false })
     try {
       await deliverBatch(jobs, { reserve: onDebit, deliver: () => {
         const url = URL.createObjectURL(zipImages(files)); const link = document.createElement('a')

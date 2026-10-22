@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { flushSync } from 'react-dom'
 import { PhonePreview } from './PhonePreview'
 import { captureChatPhone } from '@/lib/capture-chat'
+import { boundedCapture, captureFailure } from '@/lib/capture-resources'
 import type { BatchJob } from '@/lib/batch'
 
 export async function renderBatchChat(job: BatchJob) {
@@ -14,10 +15,9 @@ export async function renderBatchChat(job: BatchJob) {
   let canvas: HTMLCanvasElement | null = null
   try {
     flushSync(() => root.render(<PhonePreview {...job.snapshot!} phoneRef={ref} />))
-    await document.fonts.ready
-    await Promise.all(Array.from(host.querySelectorAll('img')).map(async image => {
-      await image.decode().catch(() => { throw new Error('头像或消息图片加载失败，请替换为本地上传图片后重试。') })
-    }))
+    await boundedCapture(document.fonts.ready, captureFailure('capture_timeout','preview'))
+    // The shared capture pipeline validates and embeds resources with the same
+    // bounded, retry-safe loader used by single-chat exports.
     if (!ref.current) throw new Error('聊天预览尚未就绪。')
     const body = ref.current.querySelector('.wc-chat-body')
     if (body) body.scrollTop = 0

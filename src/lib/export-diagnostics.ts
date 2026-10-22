@@ -16,13 +16,24 @@ export function exportReason(error: unknown): string {
   return 'unknown'
 }
 
-export function exportDetails(error: unknown): { error_kind: string; render_step: string } {
+export const captureDiagnosticValues: Record<string, readonly string[]> = {
+  failure_code: ['asset_fetch','asset_http','asset_decode','asset_timeout','asset_embed','svg_build','svg_decode','canvas_context','canvas_draw','capture_timeout'],
+  asset_kind: ['avatar','message','background','chrome','other'],
+  asset_scheme: ['data','blob','same_origin','remote','other'],
+}
+
+export function exportDetails(error: unknown): { error_kind: string; render_step: string; [key: string]: string } {
   try {
-    const e = error as { name?: string; type?: string; renderStep?: string; diagnosticKind?: string }
+    const e = error as { name?: string; type?: string; renderStep?: string; diagnosticKind?: string; captureInfo?: Record<string, unknown> }
     const kind = error == null ? 'missing_exception' : e?.type === 'error' ? 'resource_event'
       : typeof DOMException !== 'undefined' && error instanceof DOMException ? 'dom_exception'
       : error instanceof Error ? 'error' : 'non_error'
-    return { error_kind: ['missing_exception','resource_event','dom_exception','error','non_error'].includes(e?.diagnosticKind || '') ? e.diagnosticKind! : kind, render_step: ['preview','asset_embed','svg_rasterize','capture'].includes(e?.renderStep || '') ? e.renderStep! : 'none' }
+    const metadata: Record<string,string> = {}
+    for (const [key, values] of Object.entries(captureDiagnosticValues)) {
+      const value = e?.captureInfo?.[key]
+      if (typeof value === 'string' && values.includes(value)) metadata[key] = value
+    }
+    return { error_kind: ['missing_exception','resource_event','dom_exception','error','non_error'].includes(e?.diagnosticKind || '') ? e.diagnosticKind! : kind, render_step: ['preview','asset_embed','svg_rasterize','capture'].includes(e?.renderStep || '') ? e.renderStep! : 'none', ...metadata }
   } catch { return { error_kind: 'non_error', render_step: 'none' } }
 }
 
@@ -32,6 +43,7 @@ export function renderFailure(error: unknown, step = 'capture') {
     exportReason: reason === 'unknown' ? 'render_failed' : reason,
     renderStep: (error as { renderStep?: string })?.renderStep || (step !== 'capture' ? step : (error as { type?: string })?.type === 'error' ? 'svg_rasterize' : step),
     diagnosticKind: exportDetails(error).error_kind,
+    captureInfo: exportDetails(error),
   })
 }
 

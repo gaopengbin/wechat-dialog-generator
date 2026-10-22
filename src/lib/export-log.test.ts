@@ -12,7 +12,7 @@ test('export log serializes start and completion and ignores duplicate finishes'
   assert.ok(writes.every(row => row.id === log.id && row.count === 3))
   assert.ok(writes[1].finishedAt)
   assert.equal(writes[1].note, '')
-  assert.deepEqual(Object.keys(writes[1]).sort(), ['id', 'tool', 'mode', 'filename', 'count', 'startedAt', 'finishedAt', 'outcome', 'note'].sort())
+  assert.deepEqual(Object.keys(writes[1]).sort(), ['id', 'actionId', 'tool', 'mode', 'filename', 'count', 'startedAt', 'finishedAt', 'outcome', 'note'].sort())
 })
 
 test('storage failure does not throw or prevent the terminal record retry', async () => {

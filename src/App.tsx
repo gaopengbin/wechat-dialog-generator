@@ -514,11 +514,11 @@ function App() {
     }
   }, [exportIdentity]);
 
-  const authorizeExport = useCallback(async () => {
+  const authorizeExport = useCallback(async (actionId: string = crypto.randomUUID()) => {
     try {
       const identity = exportIdentity;
       requireExportLogin(identity);
-      const reservation = await consumeAccountExport(crypto.randomUUID(), identity);
+      const reservation = await consumeAccountExport(actionId, identity);
       exportIdentities.current.set(reservation.action_id, identity);
       applyExportQuota(identity, reservation.quota);
       return reservation.action_id;
@@ -782,7 +782,7 @@ function App() {
       const canvas = await capturePhone(false);
       if (!canvas) { void log.finish('failed', '未能获取聊天预览'); return; }
       log.stage('authorize');
-      const ticket = await authorizeExport();
+      const ticket = await authorizeExport(log.id);
       if (!ticket) { void log.finish('cancelled', '额度校验未通过'); return; }
       log.action(ticket);
       log.stage('encode');
@@ -822,7 +822,7 @@ function App() {
         if (!blob) { void log.finish('failed', '图片转换失败'); return; }
         try {
           log.stage('authorize');
-      const ticket = await authorizeExport();
+      const ticket = await authorizeExport(log.id);
           if (!ticket) { void log.finish('cancelled', '额度校验未通过'); return; }
           log.action(ticket);
           log.stage('clipboard');
@@ -859,7 +859,7 @@ function App() {
       const canvas = await capturePhone(true);
       if (!canvas) { void log.finish('failed', '未能获取聊天预览'); return; }
       log.stage('authorize');
-      const ticket = await authorizeExport();
+      const ticket = await authorizeExport(log.id);
       if (!ticket) { void log.finish('cancelled', '额度校验未通过'); return; }
       log.action(ticket);
       log.stage('encode');
