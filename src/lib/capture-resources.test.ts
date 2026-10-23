@@ -1,11 +1,36 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { assetScheme, boundedCapture, captureFailure, loadCaptureResource } from './capture-resources'
+import { assetScheme, boundedCapture, bundledChrome, captureFailure, decodeImage, loadCaptureResource } from './capture-resources'
+import { phoneChrome } from './phone-chrome'
+import { readFileSync } from 'node:fs'
 import { exportDetails, renderFailure } from './export-diagnostics'
 import { createExportLogger } from './export-log'
 
 const valid='data:image/png;base64,dGVzdA=='
 const deps={fetcher:async()=>new Response(new Blob(['bytes'],{type:'image/png'})),read:async()=>valid,decode:async()=>({naturalWidth:1,naturalHeight:1} as HTMLImageElement)}
+test('all seven bundled UI icons preserve original bytes and work with network unavailable',async()=>{
+ assert.equal(Object.keys(phoneChrome).length,7)
+ for(const [name,uri] of Object.entries(phoneChrome)) {
+  assert.deepEqual(Buffer.from(uri.split(',')[1],'base64'),readFileSync(new URL('../../public/'+name,import.meta.url)))
+  assert.equal(await loadCaptureResource('/app/'+name,'chrome','https://chat.test/app/',{...deps,fetcher:async()=>{throw Error('offline')}}),uri)
+  assert.equal(bundledChrome('https://other.test/app/'+name,'https://chat.test/app/'),undefined)
+  assert.equal(bundledChrome('/app/'+name+'?user=private','https://chat.test/app/'),undefined)
+ }
+})
+test('loaded image with pixels never waits for a hung optional decode()',async()=>{
+ const previous=globalThis.Image;let decodeCalls=0
+ class LoadedImage {
+  naturalWidth=32;naturalHeight=32
+  onload: (()=>void)|null=null;onerror: (()=>void)|null=null
+  decode(){decodeCalls++;return new Promise<void>(()=>{})}
+  set src(_value:string){queueMicrotask(()=>this.onload?.())}
+ }
+ try {
+  globalThis.Image=LoadedImage as unknown as typeof Image
+  const image=await boundedCapture(decodeImage(valid),new Error('must not time out'),100)
+  assert.equal(image.naturalWidth,32);assert.equal(decodeCalls,0)
+ }finally{globalThis.Image=previous}
+})
 test('failed external resource can recover on the next attempt without a poisoned library cache',async()=>{
  let requests=0
  const fetcher=async()=>{requests++;if(requests===1)throw Error('private URL or token');return new Response('image')}

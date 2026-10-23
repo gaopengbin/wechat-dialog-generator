@@ -10,6 +10,16 @@ test('diagnostics never retain private exception content or user agent', () => {
   assert.equal(browserFamily('Chrome/140.0 secret@example.com'), 'chrome-140')
 })
 
+test('long-image safety limit survives repeated wrapping and retains actionable local guidance',()=>{
+ const first=renderFailure(new Error('对话过长，单图最高 16000 像素'))
+ const wrapped=renderFailure(first)
+ assert.equal(exportReason(first),'image_too_large')
+ assert.equal(exportReason(wrapped),'image_too_large')
+ assert.match(wrapped.message,/16000/)
+ assert.match(wrapped.message,/拆成多组/)
+ assert.doesNotMatch(JSON.stringify(exportDetails(wrapped)),/对话|16000/)
+})
+
 test('renderer resource events, plain failures and missing preview have safe structured categories', () => {
   const asset = renderFailure(new Event('error'), 'asset_embed')
   assert.equal(exportReason(asset), 'resource_load')

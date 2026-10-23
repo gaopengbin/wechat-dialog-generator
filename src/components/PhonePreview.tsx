@@ -1,6 +1,7 @@
 import { useRef, useEffect } from 'react';
 import type { ChatUser, ChatMessage, PhoneSettings } from '@/types';
 import { getDefaultAvatar } from '@/lib/parser';
+import { phoneChrome } from '@/lib/phone-chrome';
 import { WechatPhoneHeader } from '@/components/WechatPhoneHeader';
 import './PhonePreview.css';
 
@@ -87,9 +88,9 @@ function ChatBubble({ msg, user, userIndex, isSelf, isGroup, selfColor, otherCol
             <div className="wc-bubble wc-bubble-voice" style={{ background: bubbleColor, width: `${w}px` }}>
               <span className="wc-arrow" style={{ background: bubbleColor }} />
               {isSelf ? (
-                <><span className="wc-voice-dur">{dur}&quot;</span><img className="wc-voice-wave" src={`${import.meta.env.BASE_URL}wechat-voice-icon2.png`} alt="" /></>
+                <><span className="wc-voice-dur">{dur}&quot;</span><img className="wc-voice-wave" src={phoneChrome['wechat-voice-icon2.png']} alt="" /></>
               ) : (
-                <><img className="wc-voice-wave" src={`${import.meta.env.BASE_URL}wechat-voice-icon1.png`} alt="" /><span className="wc-voice-dur">{dur}&quot;</span>{!msg.params.transcript && <i className="wc-voice-unread" />}</>
+                <><img className="wc-voice-wave" src={phoneChrome['wechat-voice-icon1.png']} alt="" /><span className="wc-voice-dur">{dur}&quot;</span>{!msg.params.transcript && <i className="wc-voice-unread" />}</>
               )}
             </div>
             {msg.params.transcript && (
@@ -103,7 +104,7 @@ function ChatBubble({ msg, user, userIndex, isSelf, isGroup, selfColor, otherCol
           <div className="wc-bubble wc-bubble-redpacket">
             <span className="wc-arrow" style={{ background: '#f79c46' }} />
             <div className="wc-rp-content">
-              <div className="wc-rp-icon wc-rp-icon-redpacket"><img src={`${import.meta.env.BASE_URL}wechat-trans-icon3.png`} alt="" /></div>
+              <div className="wc-rp-icon wc-rp-icon-redpacket"><img src={phoneChrome['wechat-trans-icon3.png']} alt="" /></div>
               <div className="wc-rp-info">
                 <span>{escHtml(msg.params.remark || '恭喜发财，大吉大利')}</span>
               </div>
@@ -116,7 +117,7 @@ function ChatBubble({ msg, user, userIndex, isSelf, isGroup, selfColor, otherCol
           <div className="wc-bubble wc-bubble-transfer">
             <span className="wc-arrow" style={{ background: '#f79c46' }} />
             <div className="wc-rp-content">
-              <div className="wc-rp-icon"><img src={`${import.meta.env.BASE_URL}wechat-trans-icon1.png`} alt="" /></div>
+              <div className="wc-rp-icon"><img src={phoneChrome['wechat-trans-icon1.png']} alt="" /></div>
               <div className="wc-rp-info">
                 <span>¥{parseFloat(msg.params.amount || '0').toFixed(2)}</span>
                 <small>{escHtml(msg.params.remark || '转账')}</small>
@@ -206,7 +207,7 @@ export function PhonePreview({ users, messages, settings, selfId, phoneRef, onUp
                 <div className="wc-bottom-inner">
                   {/* 语音按钮 */}
                   <div className="wc-bottom-icon">
-                    <img src={`${import.meta.env.BASE_URL}wechat-bottom-icon1.png`} alt="语音" />
+                    <img src={phoneChrome['wechat-bottom-icon1.png']} alt="语音" />
                   </div>
                   {/* 输入框 */}
                   <div className="wc-input-box">
@@ -218,11 +219,11 @@ export function PhonePreview({ users, messages, settings, selfId, phoneRef, onUp
                   </div>
                   {/* 表情按钮 */}
                   <div className="wc-bottom-icon">
-                    <img src={`${import.meta.env.BASE_URL}wechat-bottom-icon2.png`} alt="表情" />
+                    <img src={phoneChrome['wechat-bottom-icon2.png']} alt="表情" />
                   </div>
                   {/* 加号按钮 */}
                   <div className="wc-bottom-icon">
-                    <img src={`${import.meta.env.BASE_URL}wechat-bottom-icon3.png`} alt="加号" />
+                    <img src={phoneChrome['wechat-bottom-icon3.png']} alt="加号" />
                   </div>
                 </div>
               </div>

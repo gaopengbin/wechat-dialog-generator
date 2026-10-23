@@ -5,7 +5,9 @@ import {toCanvas} from 'html-to-image'
 import {PhonePreview} from '../../src/components/PhonePreview'
 import {captureChatPhone} from '../../src/lib/capture-chat'
 import {renderChatCanvas} from '../../src/lib/capture-render'
-import {exportDetails} from '../../src/lib/export-diagnostics'
+import {exportDetails,exportReason} from '../../src/lib/export-diagnostics'
+import {renderBatchChat} from '../../src/components/batch-chat-render'
+import {runBatch,deliverBatch,zipImages,type BatchJob} from '../../src/lib/batch'
 import type {PhoneSettings,ChatMessage} from '../../src/types'
 
 const result=document.querySelector('#results')!,fixtures=document.querySelector('#fixtures')!,previews=document.querySelector('#previews')!
@@ -43,6 +45,9 @@ document.querySelector<HTMLButtonElement>('#run')!.onclick=async()=>{
   try {await renderChatCanvas(bad,100,100);throw Error('corrupt image must fail')}catch(error){check(exportDetails(error).failure_code==='asset_decode','corrupt image stage lost');reports.push({test:'corrupt image fails before capture with no quota call',pass:true,details:exportDetails(error)})}finally{bad.remove()}
   const phoneHost=document.createElement('div');fixtures.append(phoneHost);const root=createRoot(phoneHost),ref=createRef<HTMLDivElement>()
   const messages:ChatMessage[]=Array.from({length:16},(_,i)=>({id:i+1,type:'text',senderId:i%2+1,content:`测试消息 ${i+1}：普通截图与完整长图应保持头像、文字和浅绿色气泡。`,params:{}}))
+  const nativeDecode=HTMLImageElement.prototype.decode;let decodeCalls=0,blockedIconRequests=0
+  HTMLImageElement.prototype.decode=function(){decodeCalls++;return new Promise(()=>{})}
+  window.fetch=async(input,init)=>{if(/wechat-(bottom|voice|trans)-icon/.test(String(input))){blockedIconRequests++;throw Error('fixture icon network is offline')}return original(input,init)}
   try {
    flushSync(()=>root.render(<PhonePreview users={[{id:1,name:'小明',avatar:null},{id:2,name:'小林',avatar:null}]} messages={messages} selfId={1} settings={settings} phoneRef={ref}/>))
    await document.fonts.ready
@@ -50,8 +55,27 @@ document.querySelector<HTMLButtonElement>('#run')!.onclick=async()=>{
    const long=await captureChatPhone(ref.current!,true);check(long?.width===1125&&long.height>=2436,'long image too short');display(long!,`长图：1125 × ${long!.height}`)
    check(phoneHost.querySelector<HTMLElement>('.wc-phone-wrap')!.style.height==='','capture layout was not restored')
    reports.push({test:'actual React phone normal and long captures; styles restored',pass:true,standard:[standard!.width,standard!.height],long:[long!.width,long!.height]})
-  } finally{root.unmount();phoneHost.remove()}
-  document.querySelector('#status')!.textContent='通过：失败缓存恢复、查询参数隔离、损坏图片诊断、真实普通图及长图；额度请求 0 次。'
+   const snapshot={users:[{id:1,name:'小明',avatar:red},{id:2,name:'小林',avatar:blue}],messages,selfId:1,settings}
+   const huge:BatchJob={id:crypto.randomUUID(),selected:true,state:'ready',mode:'long',content:{title:'超限测试',body:''},snapshot:{...snapshot,messages:Array.from({length:150},(_,i)=>({id:i+1,type:'text',senderId:i%2+1,content:'超长消息'.repeat(20),params:{}}))}}
+   let reserves=0
+   await runBatch([huge],{render:renderBatchChat,debit:async()=>{reserves++},cancelled:()=>false,update:()=>{},complete:()=>{},failure:(_job,error)=>{check(exportReason(error)==='image_too_large','long limit was reduced to generic render_failed')}})
+   check(huge.state==='error'&&reserves===0&&huge.error?.includes('16000'),'oversized batch charged or hid recovery guidance')
+   reports.push({test:'real oversized batch is actionable, cleaned up, and does not reserve quota',pass:true,reserves,reason:'image_too_large'})
+   huge.snapshot=snapshot
+   const mixed:ChatMessage[]=[{id:1,type:'voice',senderId:2,content:'',params:{duration:5}},{id:2,type:'voice',senderId:1,content:'',params:{duration:3}},{id:3,type:'transfer',senderId:1,content:'',params:{amount:'8.88'}},{id:4,type:'redpacket',senderId:2,content:'',params:{remark:'回归测试'}}]
+   const jobs:BatchJob[]=[huge,...['standard','long'].map(mode=>({id:crypto.randomUUID(),selected:true,state:'ready' as const,mode:mode as 'standard'|'long',content:{title:'批量测试',body:''},snapshot:{...snapshot,messages:mixed}}))]
+   const committed=new Set<string>();let delivered=0
+   await runBatch(jobs,{render:renderBatchChat,debit:async()=>{reserves++},cancelled:()=>false,update:()=>{},complete:()=>{}})
+   check(jobs.every(j=>j.state==='done'&&j.bytes?.length)&&reserves===3,'actual three-image batch failed')
+   const zip=zipImages(jobs.map((j,i)=>({name:`${i+1}.png`,bytes:j.bytes!})))
+   for(let i=0;i<2;i++)await deliverBatch(jobs,{reserve:async()=>{},deliver:()=>{delivered++},complete:id=>{committed.add(id)},failed:()=>{throw Error('fixture delivery failed')}})
+   check(committed.size===3&&delivered===2,'retry duplicated fixture ledger')
+   const dimensions=jobs.map(j=>{const view=new DataView(j.bytes!.buffer,j.bytes!.byteOffset,j.bytes!.byteLength);return [view.getUint32(16),view.getUint32(20)]})
+   const download=document.createElement('a');download.href=URL.createObjectURL(zip);download.download='capture-regression-3-images.zip';download.textContent='下载已验证的三图 ZIP';previews.append(download)
+   check(blockedIconRequests===0&&decodeCalls===0,'capture still depends on icon network or decode()')
+   reports.push({test:'three real batch PNGs and ZIP; failed job retried with same ID; fixture completion idempotent',pass:true,dimensions,zipBytes:zip.size,uniqueCompletions:committed.size,blockedIconRequests,decodeCalls})
+  } finally{HTMLImageElement.prototype.decode=nativeDecode;window.fetch=original;root.unmount();phoneHost.remove()}
+  document.querySelector('#status')!.textContent='全部通过：图标断网、decode 挂起、普通图/长图、三图批量 ZIP、超限提示和原编号重试；真实额度请求 0 次。'
   result.textContent=JSON.stringify({passed:true,reports,quotaRequests:0},null,2)
  }catch(error){result.textContent=JSON.stringify({passed:false,reports,error:error instanceof Error?error.message:'unknown',details:exportDetails(error)},null,2)}finally{button.disabled=false}
 }

@@ -1,4 +1,14 @@
 import { withRequestTimeout } from './request-timeout'
+import { phoneChrome } from './phone-chrome'
+
+// Only exact application-owned paths may use bundled bytes. Never substitute a
+// user's image because it happens to have the same filename on another origin.
+export function bundledChrome(source: string, base: string) {
+  const url = new URL(source, base)
+  for (const [name, bytes] of Object.entries(phoneChrome)) {
+    if (url.href === new URL(name, base).href) return bytes
+  }
+}
 
 export type AssetKind = 'avatar' | 'message' | 'background' | 'chrome' | 'other'
 export function assetScheme(source: string, base = 'http://localhost/') {
@@ -29,8 +39,11 @@ export function decodeImage(source: string): Promise<HTMLImageElement> {
       if(!image.naturalWidth || !image.naturalHeight) {reject(new Error('Image has no pixels'));return}
       // Some old engines expose decode() but reject valid already-loaded images.
       // onload + positive dimensions is the compatibility fallback, not a blank image.
-      if(typeof image.decode==='function') image.decode().then(()=>resolve(image),()=>resolve(image))
-      else resolve(image)
+      // onload + real pixels is sufficient for canvas drawing. decode() can
+      // remain pending on older engines even after a valid load; awaiting it
+      // converted usable built-in icons into repeated 15-second timeouts.
+      image.onload=null;image.onerror=null
+      resolve(image)
     }
     image.onerror=()=>reject(new Error('Image decode failed'))
     image.src=source
@@ -38,8 +51,8 @@ export function decodeImage(source: string): Promise<HTMLImageElement> {
 }
 export async function loadCaptureResource(source: string, kind: AssetKind, base: string, deps = { fetcher: (...args: Parameters<typeof fetch>) => fetch(...args), read: readBlob, decode: decodeImage }) {
   const scheme=assetScheme(source,base)
-  let data=source
-  if(scheme!=='data') {
+  let data=bundledChrome(source,base) ?? source
+  if(!data.startsWith('data:')) {
     try {
       const response=await withRequestTimeout(signal=>deps.fetcher(new URL(source,base).href,{signal,cache:'no-cache',credentials:scheme==='same_origin'?'same-origin':'omit'}),12000)
       if(!response.ok) throw captureFailure('asset_http','asset_embed',kind,scheme)

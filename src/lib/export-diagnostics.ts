@@ -3,7 +3,7 @@ export function exportReason(error: unknown): string {
   try {
     const e = error as { name?: string; message?: string }
     const text = String(e?.message || '')
-    if ((error as { exportReason?: string })?.exportReason && ['preview_missing','resource_load','render_failed'].includes((error as { exportReason: string }).exportReason)) return (error as { exportReason: string }).exportReason
+    if ((error as { exportReason?: string })?.exportReason && ['preview_missing','resource_load','render_failed','image_too_large','security','permission','storage_full','timeout','aborted','type_error'].includes((error as { exportReason: string }).exportReason)) return (error as { exportReason: string }).exportReason
     if (/16000|对话过长/.test(text)) return 'image_too_large'
     if (e?.name === 'SecurityError' || /taint|cross.origin/i.test(text)) return 'security'
     if (e?.name === 'NotAllowedError') return 'permission'
@@ -39,7 +39,12 @@ export function exportDetails(error: unknown): { error_kind: string; render_step
 
 export function renderFailure(error: unknown, step = 'capture') {
   const reason = exportReason(error)
-  return Object.assign(new Error('图片渲染失败，请刷新后重试或重新上传图片。'), {
+  const message = reason === 'image_too_large'
+    ? '本组长图超过 16000 像素，请拆成多组或改用标准截图后重试；本次未扣额度。'
+    : reason === 'resource_load'
+      ? '图片资源加载失败，请检查网络或重新上传相关图片后重试。'
+      : '图片渲染失败，请刷新后重试或重新上传图片。'
+  return Object.assign(new Error(message), {
     exportReason: reason === 'unknown' ? 'render_failed' : reason,
     renderStep: (error as { renderStep?: string })?.renderStep || (step !== 'capture' ? step : (error as { type?: string })?.type === 'error' ? 'svg_rasterize' : step),
     diagnosticKind: exportDetails(error).error_kind,
