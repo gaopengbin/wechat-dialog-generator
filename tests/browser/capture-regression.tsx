@@ -34,6 +34,30 @@ document.querySelector<HTMLButtonElement>('#run')!.onclick=async()=>{
    check(firstFailed&&secondFailed&&pixel[2]>200&&pixel[0]<20,'failure cache reproduction/recovery did not match')
    reports.push({test:'legacy failure cache reproduced; repaired loader recovers',pass:true,fetches,pixel})
   }finally{window.fetch=original;host.remove()}
+  // A picture visible in preview must not require a second network request.
+  const loaded=node(location.origin+'/avatar_1.png'),loadedImage=loaded.querySelector('img')!
+  if(!loadedImage.complete||!loadedImage.naturalWidth)await new Promise<void>((resolve,reject)=>{loadedImage.onload=()=>resolve();loadedImage.onerror=()=>reject(Error('fixture avatar could not load'))})
+  let redundantFetches=0
+  const expectedAvatar=document.createElement('canvas');expectedAvatar.width=expectedAvatar.height=100
+  expectedAvatar.getContext('2d')!.drawImage(loadedImage,0,0,100,100)
+  const expectedPixel=[...expectedAvatar.getContext('2d')!.getImageData(50,50,1,1).data]
+  window.fetch=async(input,init)=>{if(String(input).includes('/avatar_1.png')){redundantFetches++;throw Error('image network disconnected after preview loaded')}return original(input,init)}
+  try {
+   const canvas=await renderChatCanvas(loaded,100,100)
+   const actualPixel=[...canvas.getContext('2d')!.getImageData(50,50,1,1).data]
+   check(redundantFetches===0&&expectedPixel.every((v,i)=>Math.abs(v-actualPixel[i])<=3),'loaded avatar was fetched again or changed pixels')
+   check(loadedImage.getAttribute('src')===location.origin+'/avatar_1.png','loaded image source was not restored')
+   reports.push({test:'already-visible avatar survives disconnected image network; original source restored',pass:true,redundantFetches,expectedPixel,actualPixel})
+  }finally{window.fetch=original;loaded.remove()}
+  let transientFetches=0
+  window.fetch=async(input,init)=>{if(String(input).includes('/__fixture_transient_image__')){transientFetches++;if(transientFetches===1)throw Error('fixture transient network');return original(red)}return original(input,init)}
+  const transient=node(location.origin+'/__fixture_transient_image__')
+  try {
+   const canvas=await renderChatCanvas(transient,100,100)
+   const pixel=[...canvas.getContext('2d')!.getImageData(50,50,1,1).data]
+   check(transientFetches===2&&pixel[0]>200&&pixel[2]<20,'transient retry failed or changed image')
+   reports.push({test:'transient resource fetch retries once inside a single pre-quota capture',pass:true,transientFetches,pixel})
+  }finally{window.fetch=original;transient.remove()}
   window.fetch=async(input,init)=>{const url=String(input);if(url.includes('/__fixture_query_image__'))return original(url.endsWith('blue')?blue:red);return original(input,init)}
   try {
    const pixels=[]

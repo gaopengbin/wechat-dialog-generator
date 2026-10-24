@@ -20,6 +20,8 @@ export const captureDiagnosticValues: Record<string, readonly string[]> = {
   failure_code: ['asset_fetch','asset_http','asset_decode','asset_timeout','asset_embed','svg_build','svg_decode','canvas_context','canvas_draw','capture_timeout'],
   asset_kind: ['avatar','message','background','chrome','other'],
   asset_scheme: ['data','blob','same_origin','remote','other'],
+  asset_phase: ['fetch','body','decode','pixels','embed'],
+  capture_size: ['phone','long','over_limit'],
 }
 
 export function exportDetails(error: unknown): { error_kind: string; render_step: string; [key: string]: string } {
@@ -42,7 +44,9 @@ export function renderFailure(error: unknown, step = 'capture') {
   const message = reason === 'image_too_large'
     ? '本组长图超过 16000 像素，请拆成多组或改用标准截图后重试；本次未扣额度。'
     : reason === 'resource_load'
-      ? '图片资源加载失败，请检查网络或重新上传相关图片后重试。'
+      ? exportDetails(error).asset_scheme === 'remote'
+        ? '外链图片无法用于导出，可能是网络或跨域限制。请将原图下载后重新上传；本次未扣额度。'
+        : '图片资源加载失败，请检查网络或重新上传相关图片后重试；本次未扣额度。'
       : '图片渲染失败，请刷新后重试或重新上传图片。'
   return Object.assign(new Error(message), {
     exportReason: reason === 'unknown' ? 'render_failed' : reason,

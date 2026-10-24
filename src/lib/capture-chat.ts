@@ -77,7 +77,9 @@ export async function captureChatPhone(phone: HTMLDivElement, longshot = false):
       if (totalH > 16000) throw new Error('对话过长，请拆分为多组后导出（单图最高 16000 像素）。');
       canvas = await renderChatCanvas(phone,1125,totalH);
     } catch (error) {
-      throw renderFailure(error);
+      const failure = renderFailure(error);
+      failure.captureInfo = { ...failure.captureInfo, capture_size: totalH > 16000 ? 'over_limit' : totalH > 2436 ? 'long' : 'phone' };
+      throw failure;
     } finally {
       // 还原所有样式
       content.style.transform = saved.ct; content.style.transformOrigin = saved.co;

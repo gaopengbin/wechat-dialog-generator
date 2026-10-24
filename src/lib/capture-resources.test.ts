@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { assetScheme, boundedCapture, bundledChrome, captureFailure, decodeImage, loadCaptureResource } from './capture-resources'
+import { assetScheme, boundedCapture, bundledChrome, captureFailure, decodeImage, loadCaptureResource, loadedImageData } from './capture-resources'
 import { phoneChrome } from './phone-chrome'
 import { readFileSync } from 'node:fs'
 import { exportDetails, renderFailure } from './export-diagnostics'
@@ -33,10 +33,10 @@ test('loaded image with pixels never waits for a hung optional decode()',async()
 })
 test('failed external resource can recover on the next attempt without a poisoned library cache',async()=>{
  let requests=0
- const fetcher=async()=>{requests++;if(requests===1)throw Error('private URL or token');return new Response('image')}
+ const fetcher=async()=>{requests++;if(requests<=2)throw Error('private URL or token');return new Response('image')}
  await assert.rejects(loadCaptureResource('https://private.test/image.png?token=SECRET','avatar','https://chat.test/',{...deps,fetcher}),error=>exportDetails(error).failure_code==='asset_fetch')
  assert.equal(await loadCaptureResource('https://private.test/image.png?token=SECRET','avatar','https://chat.test/',{...deps,fetcher}),valid)
- assert.equal(requests,2)
+ assert.equal(requests,3)
 })
 test('resource query parameters are preserved and origins use appropriate credential mode',async()=>{
  const requests:{url:string,credentials:RequestCredentials|undefined}[]=[]
@@ -75,4 +75,47 @@ test('batch render uses stable job ID without falsely claiming a reservation',as
  const action='11111111-1111-4111-8111-111111111111'
  log.action(action,'not_requested');await log.finish('failed','',captureFailure('asset_decode','asset_embed'))
  assert.equal(reports[0].action_id,action);assert.equal(reports[0].quota_phase,'not_requested')
+})
+
+test('transient fetch retries once, preserves credentials and changes cache policy',async()=>{
+ const requests:RequestInit[]=[]
+ const fetcher=async(_url:RequestInfo|URL,init?:RequestInit)=>{requests.push(init!);if(requests.length===1)throw Error('offline');return new Response('image')}
+ assert.equal(await loadCaptureResource('/avatar.png','avatar','https://chat.test/',{...deps,fetcher}),valid)
+ assert.deepEqual(requests.map(r=>r.cache),['default','reload'])
+ assert.ok(requests.every(r=>r.credentials==='same-origin'))
+})
+test('ignored abort and stalled image body terminate with correct subphase and bounded retries',async()=>{
+ for(const phase of ['fetch','body']) {
+  let calls=0
+  const fetcher=async()=>{calls++;if(phase==='fetch')return new Promise<Response>(()=>{});return {ok:true,blob:()=>new Promise<Blob>(()=>{})} as Response}
+  await assert.rejects(loadCaptureResource('/photo.png','message','https://chat.test/',{...deps,fetcher},5),error=>{
+   const info=exportDetails(error);return info.failure_code==='asset_timeout'&&info.asset_phase===phase
+  })
+  assert.equal(calls,2)
+ }
+})
+test('capture revision and asset subphase are safe diagnostic values',async()=>{
+ const reports:Record<string,string>[]=[]
+ const log=createExportLogger(async()=>{},()=>{},p=>reports.push(p))({tool:'chat',mode:'standard'})
+ await log.finish('failed','',captureFailure('asset_timeout','asset_embed','avatar','same_origin','body'))
+ assert.equal(reports[0].capture_revision,'capture-20261024-r1')
+ assert.equal(reports[0].asset_phase,'body')
+ assert.equal(reports[0].quota_phase,'not_requested')
+ assert.equal(exportDetails({captureInfo:{asset_phase:'https://private.test',capture_size:'private text'}}).asset_phase,undefined)
+ assert.match(renderFailure(captureFailure('asset_fetch','asset_embed','message','remote','fetch')).message,/外链图片/)
+})
+
+test('loaded pixel reuse never bypasses canvas taint or accepts missing pixels',()=>{
+ const previous=globalThis.document
+ const image={complete:true,naturalWidth:32,naturalHeight:32} as HTMLImageElement
+ const canvas={width:0,height:0,getContext:()=>({drawImage:()=>{}}),toDataURL:()=>valid}
+ globalThis.document={createElement:()=>canvas} as unknown as Document
+ try {
+  assert.equal(loadedImageData(image),valid)
+  assert.equal(canvas.width,0)
+  canvas.toDataURL=()=>{throw new DOMException('private URL','SecurityError')}
+  assert.equal(loadedImageData(image),undefined)
+  assert.equal(loadedImageData({...image,complete:false} as HTMLImageElement),undefined)
+  assert.equal(loadedImageData({...image,naturalWidth:0} as HTMLImageElement),undefined)
+ }finally{globalThis.document=previous}
 })
