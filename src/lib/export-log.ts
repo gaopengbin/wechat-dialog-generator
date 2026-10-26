@@ -89,7 +89,7 @@ export function createExportLogger(write: (record: ExportLog) => Promise<unknown
           if (input.reportFailure !== false) void Promise.resolve().then(() => report({
             diagnostic_id: record.id, tool: record.tool, capture_mode: record.mode,
             action_id: record.actionId!, quota_phase: quotaPhase, diagnostic_version: '2',
-            capture_revision: 'capture-20261024-r1',
+            capture_revision: 'capture-20261026-r2',
             stage, reason, browser: browserFamily(typeof navigator === 'undefined' ? '' : navigator.userAgent),
             ...exportDetails(error),
           })).catch(() => {})

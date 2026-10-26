@@ -648,3 +648,10 @@
   margin-top: 63px;
   font-style: normal;
 }
+.wc-image-check { display: block; font-size: 24px; padding: 12px; color: #496254; background: #f0faf4; }
+.wc-image-recovery { display: grid; gap: 12px; padding: 16px; max-width: 480px; color: #704519; background: #fff7e9; font-size: 26px; line-height: 1.5; }
+.wc-image-recovery > div { display: flex; gap: 10px; flex-wrap: wrap; }
+.wc-image-recovery button { font-size: 26px; height: auto; padding: 10px 16px; }
+.wc-resource-notice { width: 100%; flex-shrink: 0; padding: 10px; margin-bottom: 8px; border: 1px solid #ead7b7; border-radius: 8px; background: #fff9ef; color: #704519; font-size: 12px; line-height: 1.6; }
+.wc-resource-notice p { margin: 0 0 6px; }
+.wc-resource-notice button { margin: 0 6px 4px 0; }

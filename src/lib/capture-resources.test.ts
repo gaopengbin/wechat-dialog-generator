@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { assetScheme, boundedCapture, bundledChrome, captureFailure, decodeImage, loadCaptureResource, loadedImageData } from './capture-resources'
 import { phoneChrome } from './phone-chrome'
+import { bundledAvatars } from './bundled-avatars'
 import { readFileSync } from 'node:fs'
 import { exportDetails, renderFailure } from './export-diagnostics'
 import { createExportLogger } from './export-log'
@@ -98,7 +99,7 @@ test('capture revision and asset subphase are safe diagnostic values',async()=>{
  const reports:Record<string,string>[]=[]
  const log=createExportLogger(async()=>{},()=>{},p=>reports.push(p))({tool:'chat',mode:'standard'})
  await log.finish('failed','',captureFailure('asset_timeout','asset_embed','avatar','same_origin','body'))
- assert.equal(reports[0].capture_revision,'capture-20261024-r1')
+ assert.equal(reports[0].capture_revision,'capture-20261026-r2')
  assert.equal(reports[0].asset_phase,'body')
  assert.equal(reports[0].quota_phase,'not_requested')
  assert.equal(exportDetails({captureInfo:{asset_phase:'https://private.test',capture_size:'private text'}}).asset_phase,undefined)
@@ -118,4 +119,16 @@ test('loaded pixel reuse never bypasses canvas taint or accepts missing pixels',
   assert.equal(loadedImageData({...image,complete:false} as HTMLImageElement),undefined)
   assert.equal(loadedImageData({...image,naturalWidth:0} as HTMLImageElement),undefined)
  }finally{globalThis.document=previous}
+})
+
+test('all four legacy default avatar paths are bundled offline, without replacing foreign or signed images', async()=>{
+ let total=0
+ for(const [name,uri] of Object.entries(bundledAvatars)) {
+  const bytes=Buffer.from(uri.split(',')[1],'base64');total+=bytes.length
+  assert.equal(bytes.subarray(0,4).toString(),'RIFF');assert.equal(bytes.subarray(8,12).toString(),'WEBP')
+  assert.equal(await loadCaptureResource('/app/'+name,'avatar','https://chat.test/app/',{...deps,fetcher:async()=>{throw Error('offline')}}),uri)
+  assert.equal(bundledChrome('https://other.test/app/'+name,'https://chat.test/app/'),undefined)
+  assert.equal(bundledChrome('/app/'+name+'?user=private','https://chat.test/app/'),undefined)
+ }
+ assert.equal(Object.keys(bundledAvatars).length,4);assert.ok(total<140000)
 })

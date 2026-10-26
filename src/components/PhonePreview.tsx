@@ -1,8 +1,10 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
+import { Button } from './ui/button';
 import type { ChatUser, ChatMessage, PhoneSettings } from '@/types';
 import { getDefaultAvatar } from '@/lib/parser';
 import { phoneChrome } from '@/lib/phone-chrome';
 import { WechatPhoneHeader } from '@/components/WechatPhoneHeader';
+import { CaptureMessageImage } from './CaptureMessageImage';
 import './PhonePreview.css';
 
 interface PhonePreviewProps {
@@ -30,8 +32,10 @@ function TimeNotice({ content }: { content: string }) {
   );
 }
 
-function ChatBubble({ msg, user, userIndex, isSelf, isGroup, selfColor, otherColor, onUpdateMessage }: {
+function ChatBubble({ msg, messageNumber, user, userIndex, isSelf, isGroup, selfColor, otherColor, onUpdateMessage, onImageError }: {
   msg: ChatMessage;
+  messageNumber: number;
+  onImageError: (id: number, source: string, error?: string) => void;
   user: ChatUser;
   userIndex: number;
   isSelf: boolean;
@@ -69,7 +73,7 @@ function ChatBubble({ msg, user, userIndex, isSelf, isGroup, selfColor, otherCol
         return (
           <div className="wc-bubble wc-bubble-image" onClick={() => imgInputRef.current?.click()} style={{ cursor: 'pointer' }}>
             {hasImage ? (
-              <img src={msg.content} alt="" />
+              <CaptureMessageImage source={msg.content} number={messageNumber} onError={error => onImageError(msg.id, msg.content, error)} onLocalize={onUpdateMessage ? data => onUpdateMessage(msg.id, data) : undefined} onReplace={onUpdateMessage ? () => imgInputRef.current?.click() : undefined} />
             ) : (
               <div className="wc-img-placeholder">
                 <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" fill="#999" stroke="none" /><path d="M21 15l-5-5L5 21" /></svg>
@@ -132,7 +136,7 @@ function ChatBubble({ msg, user, userIndex, isSelf, isGroup, selfColor, otherCol
   };
 
   return (
-    <div className={`wc-dialog ${isSelf ? 'wc-dialog-right' : ''}`}>
+    <div className={`wc-dialog ${isSelf ? 'wc-dialog-right' : ''}`} data-message-id={msg.id}>
       <div className="wc-face">
         <img src={avatarSrc} alt={user.name} />
       </div>
@@ -146,6 +150,11 @@ function ChatBubble({ msg, user, userIndex, isSelf, isGroup, selfColor, otherCol
 
 export function PhonePreview({ users, messages, settings, selfId, phoneRef, onUpdateMessage }: PhonePreviewProps) {
   const bodyRef = useRef<HTMLDivElement | null>(null);
+  const [imageErrors, setImageErrors] = useState<Record<number, { source: string; error?: string }>>({});
+  const onImageError = useCallback((id: number, source: string, error?: string) => {
+    setImageErrors(current => current[id]?.source === source && current[id]?.error === error ? current : { ...current, [id]: { source, error } });
+  }, []);
+  const blockedImages = messages.flatMap((message, index) => message.type === 'image' && imageErrors[message.id]?.source === message.content && imageErrors[message.id]?.error ? [{ id: message.id, number: index + 1 }] : []);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -159,7 +168,7 @@ export function PhonePreview({ users, messages, settings, selfId, phoneRef, onUp
   const isGroup = users.length > 2;
 
   return (
-    <div className="wc-phone-scale-wrap">
+    <>{blockedImages.length > 0 && <div className="wc-resource-notice" role="alert"><p>第 {blockedImages.map(image => image.number).join('、')} 条消息的外链图片未通过导出检查。请上传原图后导出，本次未扣额度。</p>{onUpdateMessage && blockedImages.map(image => <Button key={image.id} size="sm" variant="outline" onClick={() => bodyRef.current?.querySelector<HTMLInputElement>(`[data-message-id="${image.id}"] input[type="file"]`)?.click()}>上传第 {image.number} 条原图</Button>)}</div>}<div className="wc-phone-scale-wrap">
       <div className="wc-phone-wrap">
         <div className="wc-phone-content">
           <div className={`wc-phone wc-phone-${settings.platform}`} ref={phoneRef}>
@@ -177,7 +186,7 @@ export function PhonePreview({ users, messages, settings, selfId, phoneRef, onUp
               }}
             >
               <div className="wc-chat-content">
-                {messages.map((msg) => {
+                {messages.map((msg, index) => {
                   if (msg.type === 'time') {
                     return <TimeNotice key={msg.id} content={msg.content} />;
                   }
@@ -188,6 +197,8 @@ export function PhonePreview({ users, messages, settings, selfId, phoneRef, onUp
                     <ChatBubble
                       key={msg.id}
                       msg={msg}
+                      messageNumber={index + 1}
+                      onImageError={onImageError}
                       user={user}
                       userIndex={userIndex >= 0 ? userIndex : 0}
                       isSelf={isSelf}
@@ -232,6 +243,6 @@ export function PhonePreview({ users, messages, settings, selfId, phoneRef, onUp
           </div>
         </div>
       </div>
-    </div>
+    </div></>
   );
 }

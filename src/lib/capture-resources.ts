@@ -1,11 +1,13 @@
 import { withRequestTimeout } from './request-timeout'
 import { phoneChrome } from './phone-chrome'
+import { bundledAvatars } from './bundled-avatars'
+import { createResourceCache } from './resource-cache'
 
 // Only exact application-owned paths may use bundled bytes. Never substitute a
 // user's image because it happens to have the same filename on another origin.
 export function bundledChrome(source: string, base: string) {
   const url = new URL(source, base)
-  for (const [name, bytes] of Object.entries(phoneChrome)) {
+  for (const [name, bytes] of Object.entries({ ...phoneChrome, ...bundledAvatars })) {
     if (url.href === new URL(name, base).href) return bytes
   }
 }
@@ -94,6 +96,14 @@ export async function loadCaptureResource(source: string, kind: AssetKind, base:
   return data
 }
 
+// Preflight imported photos when previewing, not after a user spends time
+// exporting. Preview and screenshot share the same in-flight CORS-safe read.
+const previewResource = createResourceCache(async key => {
+  const [source, base, kind] = JSON.parse(key) as [string, string, AssetKind]
+  return loadCaptureResource(source, kind, base)
+})
+export const loadPreviewResource = (source: string, kind: AssetKind, base: string) => previewResource(JSON.stringify([source, base, kind]))
+
 // Attempt-local cache: preserve query strings, never cache a failed fetch or an
 // empty placeholder. Temporary substitutions are restored even after failure.
 export async function prepareCaptureResources(root: HTMLElement) {
@@ -101,11 +111,17 @@ export async function prepareCaptureResources(root: HTMLElement) {
   const cache=new Map<string,Promise<string>>()
   const load=(source:string,kind:AssetKind,image?:HTMLImageElement)=>{
     let result=cache.get(source)
-    if(!result){const pixels=image && loadedImageData(image);result=pixels ? Promise.resolve(pixels) : loadCaptureResource(source,kind,document.baseURI);cache.set(source,result)}
+    if(!result){const pixels=image && loadedImageData(image);result=pixels ? Promise.resolve(pixels) : loadPreviewResource(source,kind,document.baseURI);cache.set(source,result)}
     return result
   }
   const restore=()=>{ for(const reset of undo.reverse()) reset() }
   try {
+    const blocked = root.querySelector<HTMLElement>('[data-capture-resource-error]')
+    if (blocked) {
+      const error = captureFailure(blocked.dataset.captureResourceError || 'asset_fetch', 'asset_embed', 'message', 'remote', 'fetch')
+      error.message = `第 ${blocked.dataset.messageNumber || '?'} 条消息的外链图片无法导出。请在预览中上传原图，或点击“重新检查图片”；本次未扣额度。`
+      throw error
+    }
     for(const image of Array.from(root.querySelectorAll('img'))) {
       const source=image.currentSrc || image.src
       const kind:AssetKind=image.closest('.wc-face')?'avatar':image.closest('.wc-bubble-image')?'message':'chrome'

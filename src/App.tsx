@@ -5,6 +5,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useConfirm } from '@/lib/use-confirm';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { captureChatPhone } from '@/lib/capture-chat';
+import { copyOrDownload, downloadPng } from '@/lib/image-delivery';
 import { ArrowLeft, ArrowRight, MessageCircle, BookOpen, Check, ChevronRight, Download, Copy, FolderOpen, History, Image as ImageIcon, LayoutGrid, MessageSquare, Settings2, Share2, ShieldCheck, UserRound, UsersRound } from 'lucide-react';
 import { ImportPanel } from '@/components/ImportPanel';
 import { UserAvatarManager } from '@/components/UserAvatarManager';
@@ -21,6 +22,7 @@ import { UpdateAnnouncement } from '@/components/UpdateAnnouncement';
 import { ShareDialog } from '@/components/ShareDialog';
 import { BatchStudio } from '@/components/BatchStudio';
 import { ExportLogPage } from '@/components/ExportLogPage';
+import { CopyDownloadRecovery } from '@/components/CopyDownloadRecovery';
 import { beginExportLog, exportLogError, exportRelease } from '@/lib/export-log';
 import { createExportReceiptQueue, createReceiptStore } from '@/lib/export-receipts';
 import { WorkspacePanels } from '@/components/WorkspacePanels';
@@ -134,6 +136,8 @@ function App() {
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const phoneRef = useRef<HTMLDivElement | null>(null);
   const exportBusy = useRef(false);
+  const [exporting, setExporting] = useState(false);
+  const [copyFallback, setCopyFallback] = useState<{ blob: Blob; filename: string; ownerId: string } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const dialogTracked = useRef(false);
   const inviteLandingTracked = useRef(false);
@@ -783,6 +787,8 @@ function App() {
   const handleGenerateImage = useCallback(async () => {
     if (!phoneRef.current || exportBusy.current) return;
     exportBusy.current = true;
+    setExporting(true);
+    setCopyFallback(null);
     const filename = '微信聊天记录_' + Date.now() + '.png';
     const log = beginExportLog({ tool: 'chat', mode: 'standard', filename });
     showToast('正在生成图片...');
@@ -814,12 +820,15 @@ function App() {
       showToast('生成失败：' + (e instanceof Error ? e.message : String(e)));
     } finally {
       exportBusy.current = false;
+      setExporting(false);
     }
   }, [showToast, capturePhone, messages.length, promptAfterExport, authorizeExport, completeExport]);
 
   const handleCopyImage = useCallback(async () => {
     if (!phoneRef.current || exportBusy.current) return;
     exportBusy.current = true;
+    setExporting(true);
+    setCopyFallback(null);
     const log = beginExportLog({ tool: 'chat', mode: 'clipboard' });
     showToast('正在生成图片...');
     try {
@@ -827,39 +836,42 @@ function App() {
       if (!canvas) { void log.finish('failed', '未能获取聊天预览'); return; }
       log.stage('encode');
       const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve));
-        if (!blob) { void log.finish('failed', '图片转换失败'); return; }
-        try {
-          log.stage('authorize');
+      if (!blob) { void log.finish('failed', '图片转换失败'); return; }
+      log.stage('authorize');
       const ticket = await authorizeExport(log.id);
-          if (!ticket) { void log.finish('cancelled', '额度校验未通过'); return; }
-          log.action(ticket);
-          log.stage('clipboard');
-          await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-          void log.finish('copied');
-          completeExport(ticket);
-          void trackProductEvent('image_exported', {
-            ...(typeof ticket === 'string' ? { action_id: ticket } : {}),
-            capture_mode: 'clipboard',
-            message_count_bucket: messageCountBucket(messages.length),
-            tool: 'chat',
-          });
-          showToast('图片已复制到剪贴板！');
-          promptAfterExport();
-        } catch (error) {
-          void log.finish('failed', '图片复制失败，请检查剪贴板权限', error);
-          showToast('复制失败，请使用下载功能');
-        }
+      if (!ticket) { void log.finish('cancelled', '额度校验未通过'); return; }
+      log.action(ticket);
+      const owner = exportIdentities.current.get(ticket);
+      if (!owner?.userId || !isExportIdentityCurrent(owner)) throw new Error('账号已切换，请重新导出；本次未扣额度。');
+      log.stage('clipboard');
+      const filename = '微信聊天记录_' + Date.now() + '.png';
+      const outcome = await copyOrDownload(blob, {
+        copy: data => navigator.clipboard.write([new ClipboardItem({ 'image/png': data })]),
+        download: data => { log.stage('download'); downloadPng(data, filename); },
+      });
+      void log.finish(outcome, outcome === 'download_requested' ? '浏览器未允许复制，已自动改为下载同一图片，仅确认一次额度。' : '');
+      completeExport(ticket);
+      if (outcome === 'download_requested') setCopyFallback({ blob, filename, ownerId: owner.userId });
+      void trackProductEvent('image_exported', {
+        action_id: ticket, capture_mode: 'clipboard',
+        message_count_bucket: messageCountBucket(messages.length), tool: 'chat',
+      });
+      showToast(outcome === 'copied' ? '图片已复制到剪贴板！' : '浏览器未允许复制，已改为下载同一张图片，不重复扣额度。');
+      promptAfterExport();
     } catch (error) {
       void log.finish('failed', '图片生成失败', error);
-      showToast('操作失败');
+      showToast(error instanceof Error ? error.message : '图片导出失败，本次未扣额度');
     } finally {
       exportBusy.current = false;
+      setExporting(false);
     }
   }, [showToast, capturePhone, messages.length, promptAfterExport, authorizeExport, completeExport]);
 
   const handleGenerateLongImage = useCallback(async () => {
     if (!phoneRef.current || exportBusy.current) return;
     exportBusy.current = true;
+    setExporting(true);
+    setCopyFallback(null);
     const filename = '微信聊天记录_长截图_' + Date.now() + '.png';
     const log = beginExportLog({ tool: 'chat', mode: 'long', filename });
     showToast('正在生成长截图...');
@@ -891,6 +903,7 @@ function App() {
       showToast('生成失败：' + (e instanceof Error ? e.message : String(e)));
     } finally {
       exportBusy.current = false;
+      setExporting(false);
     }
   }, [showToast, capturePhone, messages.length, promptAfterExport, authorizeExport, completeExport]);
 
@@ -932,7 +945,7 @@ function App() {
             }} /></div>
             <div className="studio-tool-page" hidden={route !== 'chat'} id="editor" ref={editorRef}>
               <WorkspacePanels previewTitle="聊天效果预览" previewDescription="可滚动查看消息 · 导出宽度 1125px" preview={<PhonePreview users={users} messages={messages} settings={settings} selfId={selfId} phoneRef={phoneRef} onUpdateMessage={handleUpdateMessage} />}
-                previewActions={<div className="chat-export-actions"><div className="chat-export-summary"><span>{messages.length} 条消息 · {users.length} 个角色</span><span>{unlimited ? '会员不限次' : `剩余 ${visibleQuota.total_remaining} 次`}</span></div><Button type="button" className="btn btn-primary chat-export-primary" disabled={!hasMessages} onClick={handleGenerateImage}><Download size={16} /> 生成图片</Button><div className="chat-export-secondary"><Button type="button" className="btn btn-outline" disabled={!hasMessages} onClick={handleGenerateLongImage}><ImageIcon size={15} /> 长截图</Button><Button type="button" className="btn btn-outline" disabled={!hasMessages} onClick={handleCopyImage}><Copy size={15} /> 复制</Button><Button type="button" className="btn btn-outline" disabled={!hasMessages} onClick={handleShareSame}><Share2 size={15} /> 同款链接</Button></div></div>}>
+                previewActions={<div className="chat-export-actions"><div className="chat-export-summary"><span>{messages.length} 条消息 · {users.length} 个角色</span><span>{unlimited ? '会员不限次' : `剩余 ${visibleQuota.total_remaining} 次`}</span></div><Button type="button" className="btn btn-primary chat-export-primary" disabled={!hasMessages || exporting} onClick={handleGenerateImage}><Download size={16} /> 生成图片</Button><div className="chat-export-secondary"><Button type="button" className="btn btn-outline" disabled={!hasMessages || exporting} onClick={handleGenerateLongImage}><ImageIcon size={15} /> 长截图</Button><Button type="button" className="btn btn-outline" disabled={!hasMessages || exporting} onClick={handleCopyImage}><Copy size={15} /> 复制</Button><Button type="button" className="btn btn-outline" disabled={!hasMessages || exporting} onClick={handleShareSame}><Share2 size={15} /> 同款链接</Button></div>{copyFallback && <CopyDownloadRecovery onDownload={() => { if (!ensureExportLogin()) return; if (accountSessionRef.current?.user.id !== copyFallback.ownerId) { showToast('请登录生成这张图片时的账号后重新下载，不会重复扣额度。'); return; } try { downloadPng(copyFallback.blob, copyFallback.filename); } catch { showToast('浏览器未允许下载，请检查下载权限后重试，不会重复扣额度。'); } }} />}</div>}>
                 <div className="chat-project-bar"><label><span>当前对话</span><Input aria-label="工作页项目名称" placeholder="未命名对话" value={activeProjectName} maxLength={48} onChange={event => setActiveProjectName(event.target.value)} /></label><span className={`studio-save-state is-${saveState}`}>{saveState === 'saved' ? <><Check size={13} /> 已自动保存</> : saveState === 'saving' ? '保存中…' : saveState === 'error' ? '本地保存失败' : '仅保存在本机'}</span></div>
                 <Tabs value={chatSection} onValueChange={value => setChatSection(value as typeof chatSection)}>
                 <TabsList variant="line" className="studio-section-tabs" aria-label="聊天编辑面板">{([{ id: 'content', label: '聊天内容', icon: MessageSquare }, { id: 'people', label: '角色头像', icon: UsersRound }, { id: 'settings', label: '手机样式', icon: Settings2 }, { id: 'projects', label: '本地草稿', icon: FolderOpen }] as const).map(item => <TabsTrigger key={item.id} value={item.id}><item.icon size={15} />{item.label}</TabsTrigger>)}</TabsList>

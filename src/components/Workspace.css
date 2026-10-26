@@ -122,6 +122,9 @@
 .chat-export-primary { width: 100%; }
 .chat-export-secondary { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 6px; margin-top: 8px; }
 .chat-export-secondary .btn { padding: 0 5px; font-size: 11px; }
+.copy-download-recovery { margin-top: 10px; padding: 10px; border: 1px solid var(--border, #dce8df); border-radius: 8px; background: #f0faf4; color: #355b44; }
+.copy-download-recovery p { margin: 0 0 8px; font-size: 12px; line-height: 1.6; }
+.copy-download-recovery button { width: 100%; }
 .workspace-getting-started { padding: 18px 20px; background: #f1f8f3; border-radius: 7px; }
 .workspace-getting-started > span { font-size: 13px; font-weight: 600; }
 .workspace-getting-started p { font-size: 12px; color: var(--studio-muted); margin: 6px 0 12px; }

@@ -9,6 +9,7 @@ export async function renderChatCanvas(phone: HTMLElement,width: number,height: 
     try {
       svg=await boundedCapture(toSvg(phone,{
         width,height,pixelRatio:1,backgroundColor:'#ededed',includeQueryParams:true,
+        filter: node => !(node instanceof HTMLElement && node.hasAttribute('data-capture-ui')),
         onImageErrorHandler:()=>{throw captureFailure('asset_embed','asset_embed')},
       }),captureFailure('capture_timeout','capture'))
     } catch(error) {

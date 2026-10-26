@@ -75,7 +75,7 @@ export function ImportPanel({ text, onTextChange, onImport, onClearChat, message
           转账消息：<code>**用户名**：[转账]金额:备注</code><br />
           语音消息：<code>**用户名**：[语音]秒数</code>，转文字：<code>**用户名**：[语音]秒数:内容</code><br />
           时间节点：<code>**【3月1日 14:32】**</code>
-          <div className="tip-muted">标题行(#)、引用行(&gt;)、空行自动跳过。第一个出现的用户默认为"自己"。图片不带URL时可在预览中点击上传本地图片。</div>
+          <div className="tip-muted">标题行(#)、引用行(&gt;)、空行自动跳过。第一个出现的用户默认为"自己"。图片不带URL时可在预览中点击上传本地图片。外链图片会提前检查并转为本地图片；无法读取时请上传原图，预览可见不代表允许导出。</div>
           </div>
         </Disclosure>
 

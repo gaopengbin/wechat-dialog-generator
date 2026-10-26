@@ -1,4 +1,5 @@
 import type { ChatUser, ChatMessage, MessageType } from '@/types';
+import { bundledAvatars } from './bundled-avatars';
 
 const SELF_ALIASES = new Set(['我', '自己', 'me', 'Me', 'ME', 'myself', '本人']);
 const MD_MSG_REG = /^\*\*(.+?)\*\*\s*[：:]\s*(.+)$/;
@@ -51,8 +52,7 @@ const AVATAR_FILES = [
 ];
 
 export function getDefaultAvatar(index: number): string {
-  const base = import.meta.env.BASE_URL;
-  return `${base}${AVATAR_FILES[index % AVATAR_FILES.length]}`;
+  return bundledAvatars[AVATAR_FILES[((index % AVATAR_FILES.length) + AVATAR_FILES.length) % AVATAR_FILES.length]];
 }
 
 interface ParseResult {
@@ -225,7 +225,7 @@ export const EXAMPLE_TEXT = `**【3月1日 14:32】**
 
 **张三**：资料都发你了，麻烦查收一下
 
-**张三**：[图片]https://picsum.photos/400/300
+**张三**：[图片]
 
 **李四**：收到，我晚上看看
 
