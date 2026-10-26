@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { BellRing, Copy, Search, X } from 'lucide-react'
+import { Button } from './ui/button'
+import { copyFollowRewardKeyword, followRewardKeyword } from '@/lib/follow-reward'
 
 export type OfficialAccountPlacement = 'header' | 'export'
 
@@ -21,6 +23,7 @@ const officialAccountQrUrl = 'https://laogao.xyz/packages/qr-assets/gzh.jpg'
 export function OfficialAccountDialog({ open, placement, authenticated, busy, redeemMessage, onClose, onCopyId, onLogin, onRedeem }: OfficialAccountDialogProps) {
   const [qrAvailable, setQrAvailable] = useState(true)
   const [code, setCode] = useState('')
+  const [copyMessage, setCopyMessage] = useState('')
 
   useEffect(() => {
     if (!open) return
@@ -50,7 +53,7 @@ export function OfficialAccountDialog({ open, placement, authenticated, busy, re
           {placement === 'export' ? '导出成功，再领取 20 次额度' : '关注公众号，领取更多导出额度'}
         </h2>
         <p className="official-account-description">
-          关注后回复关键词“额度”，获取 15 分钟有效的一次性兑换码；登录账户兑换后立即增加 20 次导出额度。
+          在公众号私信发送【{followRewardKeyword}】领取兑换码，再回到这里兑换 20 次额外导出额度。
         </p>
 
         <div className="official-account-connect">
@@ -66,7 +69,7 @@ export function OfficialAccountDialog({ open, placement, authenticated, busy, re
               <strong>老高 Vibe Coding</strong>
             </div>
             <ul className="official-account-benefits">
-              <li>关注后回复“额度”获取兑换码</li>
+              <li>发送固定领取词，获取 15 分钟有效的兑换码</li>
               <li>每个账户限领一次，奖励 20 次导出</li>
             </ul>
             <div className="official-account-search">
@@ -77,11 +80,21 @@ export function OfficialAccountDialog({ open, placement, authenticated, busy, re
           </div>
         </div>
 
+        <div className="official-account-keyword">
+          <span>1. 关注后，在公众号私信发送</span>
+          <div><strong>{followRewardKeyword}</strong><Button variant="outline" size="sm" onClick={() => {
+            setCopyMessage('')
+            void copyFollowRewardKeyword(navigator.clipboard).then(() => setCopyMessage('已复制，请到公众号私信粘贴发送。')).catch(() => setCopyMessage(`复制未成功，请手动发送：${followRewardKeyword}`))
+          }}><Copy size={14} />复制领取词</Button></div>
+          <small>这是发给公众号的领取词，不是下方要填写的兑换码。</small>
+          {copyMessage && <small role="status">{copyMessage}</small>}
+        </div>
+
         <div className="official-account-redeem">
-          <div><span>关注奖励</span><strong>兑换 20 次额外导出</strong></div>
+          <div><span>2. 收到 LG- 开头的兑换码后</span><strong>回到这里兑换 20 次额外导出</strong></div>
           {authenticated ? (
             <form onSubmit={event => { event.preventDefault(); void onRedeem(code) }}>
-              <input value={code} onChange={event => setCode(event.target.value.toUpperCase())} placeholder="例如 LG-ABCD-2345" required />
+              <input aria-label="公众号返回的 LG 兑换码" value={code} onChange={event => setCode(event.target.value.toUpperCase())} placeholder="填写公众号返回的 LG-… 兑换码" required />
               <button type="submit" disabled={busy}>{busy ? '兑换中…' : '立即兑换'}</button>
             </form>
           ) : <button className="official-account-login" type="button" onClick={() => { setCode(''); onLogin() }}>登录后兑换</button>}
