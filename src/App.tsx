@@ -753,6 +753,14 @@ function App() {
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, avatar } : u));
   }, []);
 
+  const handleClearChat = useCallback(async () => {
+    if (!messages.length) return;
+    if (!await confirm({ title: '清空当前聊天消息？', description: '右侧全部聊天消息及导入文本将被清除。角色、头像和手机样式会保留，清空后可以直接添加图片。其他本地草稿不会删除。', confirmText: '确认清空聊天' })) return;
+    setImportText('');
+    setMessages([]);
+    showToast('已清空聊天消息，角色和手机样式已保留');
+  }, [messages.length, confirm, showToast]);
+
   const handleRemoveAvatar = useCallback((userId: number) => {
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, avatar: null } : u));
   }, []);
@@ -929,7 +937,7 @@ function App() {
                 <Tabs value={chatSection} onValueChange={value => setChatSection(value as typeof chatSection)}>
                 <TabsList variant="line" className="studio-section-tabs" aria-label="聊天编辑面板">{([{ id: 'content', label: '聊天内容', icon: MessageSquare }, { id: 'people', label: '角色头像', icon: UsersRound }, { id: 'settings', label: '手机样式', icon: Settings2 }, { id: 'projects', label: '本地草稿', icon: FolderOpen }] as const).map(item => <TabsTrigger key={item.id} value={item.id}><item.icon size={15} />{item.label}</TabsTrigger>)}</TabsList>
                 <TabsContent className="chat-section-content" value="content" keepMounted>
-                  <ImportPanel text={importText} onTextChange={setImportText} onImport={handleImport} />
+                  <ImportPanel text={importText} onTextChange={setImportText} onImport={handleImport} onClearChat={() => { void handleClearChat(); }} messageCount={messages.length} />
                   {users.length > 0 && <MessageEditor users={users} selfId={selfId} onAddMessage={handleAddMessage} />}
                   {!hasMessages && <div className="workspace-getting-started"><span>第一次使用？</span><p>按“姓名：消息”逐行输入，点击解析即可预览。也可以从模板开始。</p><StudioLink route="resources" onNavigate={navigate}>选择对话模板 <ArrowRight size={14} /></StudioLink></div>}
                 </TabsContent>

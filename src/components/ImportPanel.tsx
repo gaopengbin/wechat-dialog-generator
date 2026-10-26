@@ -35,9 +35,11 @@ interface ImportPanelProps {
   text: string;
   onTextChange: (text: string) => void;
   onImport: () => void;
+  onClearChat: () => void;
+  messageCount: number;
 }
 
-export function ImportPanel({ text, onTextChange, onImport }: ImportPanelProps) {
+export function ImportPanel({ text, onTextChange, onImport, onClearChat, messageCount }: ImportPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
 
@@ -106,14 +108,18 @@ export function ImportPanel({ text, onTextChange, onImport }: ImportPanelProps) 
           placeholder="在此粘贴聊天记录文本，或点击上方按钮导入文件..."
         />
 
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
           <Button className="btn btn-primary" onClick={onImport} disabled={!text.trim()}>
             解析并导入
           </Button>
           <Button variant="outline" className="btn btn-outline btn-sm" onClick={() => onTextChange('')} disabled={!text}>
-            <Trash2 size={15} /> 清空
+            <Trash2 size={15} /> 清空输入
+          </Button>
+          <Button variant="outline" className="btn btn-outline btn-sm" onClick={onClearChat} disabled={!messageCount}>
+            <Trash2 size={15} /> 清空聊天
           </Button>
         </div>
+        <p className="workspace-muted">清空输入只清除上方文本；清空聊天会移除右侧全部消息，保留角色和手机样式。</p>
       </div>
     </div>
   );
