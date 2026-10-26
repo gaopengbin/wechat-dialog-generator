@@ -922,7 +922,7 @@ function App() {
             </div>
           </aside>
           <div className="studio-stage">
-            {route === 'exports' && <ExportLogPage onNavigate={navigate} />}
+            {route === 'exports' && <ExportLogPage onNavigate={navigate} onRequestLogin={() => setAccountPrompt(true)} />}
             {route === 'home' && <div className="studio-page-scroll"><ToolHome onNavigate={navigate} hasDraft={hasMessages} promotion={<RewardPromotion session={accountSession} refreshKey={`${accountPrompt}:${shareOpen}`} onShare={() => setShareOpen(true)} onAccount={() => { setAccountError(''); setAccountPrompt(true); }} />} /></div>}
             {route === 'resources' && <main className="studio-page-scroll studio-resources"><StudioLink route="home" onNavigate={navigate} className="studio-back-link"><ArrowLeft size={15} /> 返回工具概览</StudioLink><h1>模板与使用指南</h1><p className="studio-page-description">挑选一个示例，在独立工作页中继续编辑。</p><GrowthContent onUseTemplate={handleUseTemplate} onOpenEditor={() => { setChatSection('content'); navigate('chat'); }} /><footer className="analytics-note">创作内容和图片在本地处理；主动分享同款时，对话文字会写入分享链接。账号服务保存邮箱、验证和额度 / 邀请记录，访问统计使用匿名标识。</footer></main>}
             {isWorking && <h1 className="studio-work-title sr-only">{workspaceTools.find(tool => tool.id === activeTool)?.title}</h1>}

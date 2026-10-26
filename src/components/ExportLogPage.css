@@ -10,6 +10,17 @@
 .export-log-table { border:1px solid #dce5df; border-radius:8px; background:#fff; }
 .export-log-row { display:grid; grid-template-columns:160px minmax(150px,1fr) 110px minmax(130px,.6fr) 105px; align-items:center; gap:14px; padding:12px; border-bottom:1px solid #e6ece8; font-size:13px; }
 .export-log-row:last-child { border-bottom:0; }
+.export-log-row-actions { display:flex; flex-direction:column; align-items:stretch; gap:5px; }
+.support-diagnostic-dialog .ui-confirm-title { display:flex; align-items:center; gap:8px; margin:0; }
+.support-diagnostic-privacy { display:flex; align-items:flex-start; gap:7px; padding:10px; border-radius:7px; background:#edf8f1; color:#176b49; font-size:12px; line-height:1.7; }
+.support-diagnostic-privacy svg { flex-shrink:0; margin-top:2px; }
+.support-diagnostic-operation { font-size:12px; color:var(--control-muted); line-height:1.6; }
+.support-diagnostic-operation code { display:block; overflow-wrap:anywhere; }
+.support-diagnostic-code { display:grid; gap:9px; padding:14px; background:#f4faf6; border:1px solid #dce9e0; border-radius:8px; }
+.support-diagnostic-code > code { font-size:15px; color:#11683e; overflow-wrap:anywhere; user-select:all; }
+.support-diagnostic-code > span,.support-diagnostic-code > small,.support-diagnostic-warning { font-size:12px; line-height:1.7; color:var(--control-muted); }
+.support-diagnostic-dialog .ui-confirm-actions { flex-wrap:wrap; margin-top:18px; }
+.support-diagnostic-dialog { max-height:calc(100dvh - 32px); overflow:auto; scrollbar-width:none; }
 .export-log-labels { background:#f5f9f6; color:#52675b; font-size:12px; border-radius:8px 8px 0 0; }
 .export-log-row > * { min-width:0; overflow-wrap:anywhere; }
 .export-log-row time { font-size:12px; color:#59655e; font-variant-numeric:tabular-nums; }

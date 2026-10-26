@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowUpRight, History, RefreshCw, Trash2 } from 'lucide-react'
+import { ArrowUpRight, ShieldCheck, History, RefreshCw, Trash2 } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { SelectField } from './ui/select'
 import { ConfirmDialog } from './ui/confirm-dialog'
+import { SupportDiagnosticDialog } from './SupportDiagnosticDialog'
 import { clearExportLogs, exportLogChanged, exportModes, exportOutcomes, filterExportLogs, listExportLogs, type ExportLog } from '@/lib/export-log'
 import { workspaceTools } from '@/lib/workspace-tools'
 import type { WorkspaceRoute } from '@/lib/workspace-route'
 import './ExportLogPage.css'
 
 const pageSize = 30
-export function ExportLogPage({ onNavigate }: { onNavigate: (route: WorkspaceRoute) => void }) {
+export function ExportLogPage({ onNavigate, onRequestLogin }: { onNavigate: (route: WorkspaceRoute) => void; onRequestLogin?: () => void }) {
   const [records, setRecords] = useState<ExportLog[]>([])
+  const [diagnosticRecord, setDiagnosticRecord] = useState<ExportLog | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [clearOpen, setClearOpen] = useState(false)
@@ -59,10 +61,11 @@ export function ExportLogPage({ onNavigate }: { onNavigate: (route: WorkspaceRou
         <div role="cell"><strong>{workspaceTools.find(tool => tool.id === record.tool)?.title || record.tool}</strong><span className="export-log-filename">{record.filename || (record.mode === 'clipboard' ? '复制到剪贴板' : '未生成文件')}</span></div>
         <span role="cell">{exportModes[record.mode]}<small>{record.count} 张</small></span>
         <div role="cell"><span className={`export-log-status is-${record.outcome}`}>{exportOutcomes[record.outcome]}</span>{record.note && <small>{record.note}</small>}</div>
-        <div role="cell"><Button size="sm" variant="ghost" aria-label={`打开${workspaceTools.find(tool => tool.id === record.tool)?.title || record.tool}`} onClick={() => onNavigate(record.tool)}>打开工具<ArrowUpRight size={14} /></Button></div>
+        <div role="cell" className="export-log-row-actions"><Button size="sm" variant="outline" onClick={() => setDiagnosticRecord(record)}><ShieldCheck size={14} />获取诊断码</Button><Button size="sm" variant="ghost" aria-label={`打开${workspaceTools.find(tool => tool.id === record.tool)?.title || record.tool}`} onClick={() => onNavigate(record.tool)}>打开工具<ArrowUpRight size={14} /></Button></div>
       </div>)}
     </div>}
     {visible.length > 0 && <footer className="export-log-pagination"><span>第 {currentPage} / {pages} 页</span><Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>上一页</Button><Button variant="outline" size="sm" disabled={currentPage >= pages} onClick={() => setPage(currentPage + 1)}>下一页</Button></footer>}
     <ConfirmDialog open={clearOpen} onOpenChange={open => { if (!clearing) setClearOpen(open) }} title="清除全部导出日志？" description="仅删除当前浏览器的日志，无法撤销。不删除已下载文件或草稿，不退还或扣除额度。" confirmText={clearing ? '清除中…' : '确认清除日志'} onConfirm={() => void clear()} />
+    <SupportDiagnosticDialog record={diagnosticRecord} onClose={() => setDiagnosticRecord(null)} onRequestLogin={onRequestLogin} />
   </main>
 }

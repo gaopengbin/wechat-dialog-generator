@@ -1,6 +1,7 @@
 import { measureGrowthRequest } from './growth-analytics'
 import { withRequestTimeout } from './request-timeout'
-const apiRoot = import.meta.env.VITE_ACCOUNT_API_ENDPOINT ||
+import type { SupportLocalReport } from './support-diagnostic'
+const apiRoot = import.meta.env?.VITE_ACCOUNT_API_ENDPOINT ||
   (['gaopengbin.github.io', 'chat.laogao.xyz'].includes(window.location.hostname)
     ? 'https://laogao.xyz/platform-api/v1'
     : 'http://127.0.0.1:9092/platform-api/v1')
@@ -167,6 +168,24 @@ export async function logoutAccount() {
   } finally {
     localStorage.removeItem(tokenStorageKey)
   }
+}
+
+export interface SupportDiagnosticCode {
+  code: string
+  expires_at: string
+  action_id: string
+  scope: 'single_export'
+  notice: string
+}
+export async function createSupportDiagnosticCode(actionId: string, signal?: AbortSignal, clientReport?: SupportLocalReport) {
+  const credential = token()
+  if (!credential) throw new AccountApiError(401, 'login_required', '请先登录，再为本账户的导出生成诊断码。')
+  const result = await request<SupportDiagnosticCode>('/support/diagnostics', {
+    method: 'POST', body: JSON.stringify({ action_id: actionId, ...(clientReport ? {client_report:clientReport} : {}) }), signal,
+  }, credential)
+  assertExportIdentity({ userId: null, credential })
+  if (!/^WX-[A-F0-9]{24}$/.test(result.code) || result.scope !== 'single_export' || result.action_id !== actionId || !Number.isFinite(Date.parse(result.expires_at))) throw new Error('诊断码响应不完整，请重试。')
+  return result
 }
 
 export async function consumeAccountExport(action_id: string = crypto.randomUUID(), identity?: ExportIdentity) {
