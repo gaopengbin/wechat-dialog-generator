@@ -4,7 +4,7 @@ import { BookOpen, Megaphone, MousePointerClick, Search, ShieldCheck, X } from '
 import { Button } from './ui/button'
 import './UpdateAnnouncement.css'
 
-const announcementId = '2026-10-29-complete-guide-v1'
+const announcementId = '2026-10-29-export-receipts-v2'
 const readKey = 'wechat-dialog-generator:announcement-read'
 
 export function UpdateAnnouncement({ blocked = false, onOpenGuide }: { blocked?: boolean; onOpenGuide?: () => void }) {
@@ -29,13 +29,13 @@ export function UpdateAnnouncement({ blocked = false, onOpenGuide }: { blocked?:
       <Dialog.Backdrop className="announcement-backdrop" />
       <Dialog.Popup className="announcement-dialog">
         <div className="announcement-topline"><span><Megaphone size={15} /> 更新公告</span><time dateTime="2026-10-29">2026.10.29</time><Dialog.Close render={<Button variant="ghost" size="icon" aria-label="关闭更新公告" />}><X size={18} /></Dialog.Close></div>
-        <Dialog.Title className="announcement-title">完整功能教程上线</Dialog.Title>
-        <Dialog.Description className="announcement-description">把每个功能从编辑到导出的步骤放进网站，遇到问题可以直接看对应教程。</Dialog.Description>
+        <Dialog.Title className="announcement-title">导出同步与异常上报修复</Dialog.Title>
+        <Dialog.Description className="announcement-description">修复图片生成后成功记录长时间待同步的问题，完整功能教程继续保留。</Dialog.Description>
         <div className="announcement-body">
-          <section><BookOpen size={18} /><div><h3>7 个工作页，17 篇教程</h3><p>覆盖个人对话、群聊、批量聊天图、朋友圈和常用微信页面，以及草稿、分享、账户充值、导出日志与问题排查。</p></div></section>
-          <section><MousePointerClick size={18} /><div><h3>边看边练，不怕找不到按钮</h3><p>示例可复制或载入聊天页，工作页截图可点开放大。已有内容载入示例前会先确认，不会直接覆盖预览。</p></div></section>
-          <section><Search size={18} /><div><h3>按功能搜索，直达当前章节</h3><p>左侧【模板与指南】可查整本手册，工作页顶部【使用教程】直接打开当前功能。手机也能通过章节选择器阅读。</p></div></section>
-          <section><ShieldCheck size={18} /><div><h3>原有内容与额度不变</h3><p>这次新增使用说明，不调整已有草稿、奖励、套餐或额度核对规则。普通使用问题可直接问公众号；核对个人导出记录时再按提示提供诊断码。</p></div></section>
+          <section><MousePointerClick size={18} /><div><h3>修复成功记录同步卡住</h3><p>同步请求增加硬超时；联网、切回页面或返回编辑器时会继续处理待同步记录，单条异常不再长时间阻塞后续记录。</p></div></section>
+          <section><Search size={18} /><div><h3>修正失败上报版本兼容</h3><p>修正前后端版本校验不一致，失败记录可正常接收；上报不包含聊天内容、图片或文件名。</p></div></section>
+          <section><ShieldCheck size={18} /><div><h3>原编号重试，不重复扣额度</h3><p>已确认的导出重试不会再扣一次。本次排查确认的历史异常操作已单独保护，不补扣。草稿、奖励和套餐规则不变。</p></div></section>
+          <section><BookOpen size={18} /><div><h3>完整功能教程继续保留</h3><p>7 个工作页、17 篇教程可从左侧【模板与指南】查找。工作页顶部【使用教程】直达对应功能；核对个人导出记录时，再按提示提供诊断码。</p></div></section>
         </div>
         <footer className="announcement-footer"><p>关闭后不再自动弹出，可从顶部“公告”重新查看。</p>{onOpenGuide && <Dialog.Close render={<Button variant="outline" onClick={onOpenGuide} />}>查看完整教程</Dialog.Close>}<Dialog.Close render={<Button />}>我知道了</Dialog.Close></footer>
       </Dialog.Popup>

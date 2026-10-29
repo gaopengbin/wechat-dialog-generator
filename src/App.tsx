@@ -435,8 +435,8 @@ function App() {
       return identity.userId && isExportIdentityCurrent(identity)
         ? { userId: identity.userId, credential: identity.credential } : null;
     },
-    confirm: async (id, identity) => {
-      const result = await completeAccountExport(id, identity);
+    confirm: async (id, identity, signal) => {
+      const result = await completeAccountExport(id, identity, signal);
       if (result.quota && isExportIdentityCurrent(identity) && accountSessionRef.current?.user.id === identity.userId) {
         setVisibleQuota(result.quota);
         setAccountSession(current => current?.user.id === identity.userId ? { ...current, quota: result.quota! } : current);
@@ -473,8 +473,8 @@ function App() {
   useEffect(() => {
     let restoring = false;
     const resume = () => {
-      void receiptQueue.flush();
-      void releaseQueue.flush();
+      void receiptQueue.resume();
+      void releaseQueue.resume();
       // A reload while offline may not have restored the account yet.
       if ((!accountSessionRef.current || !isExportIdentityCurrent(captureExportIdentity(accountSessionRef.current))) && !restoring) {
         restoring = true;
@@ -487,6 +487,7 @@ function App() {
     receiptQueue.start();
     releaseQueue.start();
     window.addEventListener('online', resume);
+    window.addEventListener('pageshow', resume);
     window.addEventListener('focus', resume);
     window.addEventListener('storage', resume);
     document.addEventListener('visibilitychange', visible);
@@ -494,6 +495,7 @@ function App() {
       receiptQueue.stop();
       releaseQueue.stop();
       window.removeEventListener('online', resume);
+      window.removeEventListener('pageshow', resume);
       window.removeEventListener('focus', resume);
       window.removeEventListener('storage', resume);
       document.removeEventListener('visibilitychange', visible);

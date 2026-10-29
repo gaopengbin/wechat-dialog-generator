@@ -1,3 +1,4 @@
+import { withRequestTimeout } from './request-timeout'
 // Only successful local exports enter this outbox. Never store credentials,
 // image bytes or chat content, and never call quota/consume from this module.
 export interface ExportReceipt {
@@ -59,7 +60,8 @@ export function createReceiptStore(storage: () => Storage, namespace = prefix): 
 export function createExportReceiptQueue(options: {
   store: ReceiptStore
   identity: () => ReceiptIdentity | null
-  confirm: (actionId: string, identity: ReceiptIdentity) => Promise<unknown>
+  confirm: (actionId: string, identity: ReceiptIdentity, signal?: AbortSignal) => Promise<unknown>
+  attemptTimeoutMs?: number
   online?: () => boolean
   now?: () => number
   schedule?: (callback: () => void, delay: number) => ReturnType<typeof setTimeout>
@@ -75,6 +77,7 @@ export function createExportReceiptQueue(options: {
   const authFailures = new Map<string, string>() // memory only, never persisted
   let timer: ReturnType<typeof setTimeout> | undefined
   let inFlight: Promise<void> | null = null
+  let activeAttempt: { controller: AbortController; deadline: number } | null = null
   let stopped = false, storageWarning = false
   const persist = (item: ExportReceipt) => {
     if (!options.store.put(item) && !storageWarning) {
@@ -108,9 +111,12 @@ export function createExportReceiptQueue(options: {
       if (authFailures.get(item.userId) === identity.credential) break
       if (item.blocked !== 'auth' && item.nextAttemptAt > now()) continue
       try {
-        await options.confirm(item.actionId, identity)
+        const attempt = { controller: new AbortController(), deadline: now() + (options.attemptTimeoutMs ?? 25_000) }
+        activeAttempt = attempt
+        await withRequestTimeout(signal => options.confirm(item.actionId, identity, signal), options.attemptTimeoutMs ?? 25_000, attempt.controller.signal)
         options.store.remove(item)
       } catch (error) {
+        if (stopped) break // Keep the same pending ID; do not notify after unmount.
         const e = error as { status?: number; code?: string }
         const next: ExportReceipt = { ...item, blocked: undefined, attempts: item.attempts + 1,
           nextAttemptAt: now() + Math.min(300_000, 2000 * 2 ** Math.min(item.attempts, 8)) }
@@ -128,7 +134,7 @@ export function createExportReceiptQueue(options: {
           }
           else options.onPending?.()
         } catch { /* Best effort. */ }
-      }
+      } finally { activeAttempt = null }
     }
   }
   function flush(): Promise<void> {
@@ -148,7 +154,14 @@ export function createExportReceiptQueue(options: {
       void flush()
     },
     flush,
+    resume() {
+      if (activeAttempt && activeAttempt.deadline <= now()) {
+        activeAttempt.controller.abort(new DOMException('确认同步已超时', 'TimeoutError'))
+        return (inFlight || Promise.resolve()).then(() => flush())
+      }
+      return flush()
+    },
     start() { stopped = false; void flush() },
-    stop() { stopped = true; if (timer !== undefined) cancel(timer); timer = undefined },
+    stop() { stopped = true; activeAttempt?.controller.abort(); if (timer !== undefined) cancel(timer); timer = undefined },
   }
 }

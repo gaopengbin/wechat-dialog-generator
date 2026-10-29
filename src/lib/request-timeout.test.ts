@@ -62,3 +62,24 @@ test('caller cancellation and already-aborted signals remain cancellations', asy
   await assert.rejects(withRequestTimeout(async () => { called = true }, 100, parent.signal), { name: 'AbortError' })
   assert.equal(called, false)
 })
+
+test('hard deadline ends a response-body wait even when the adapter ignores abort', { timeout: 1000 }, async () => {
+  let signal: AbortSignal | undefined, finish!: () => void
+  const at=Date.now()
+  await assert.rejects(withRequestTimeout(child=>{signal=child;return new Promise(resolve=>{finish=()=>resolve('late body')})},10),{name:'TimeoutError'})
+  assert.equal(signal?.aborted,true);assert.ok(Date.now()-at<500)
+  finish();await new Promise(resolve=>setTimeout(resolve,5))
+})
+
+test('parent cancellation also settles abort-ignoring work and preserves an explicit timeout reason', { timeout: 1000 }, async()=>{
+  const parent=new AbortController(),pending=withRequestTimeout(()=>new Promise(()=>{}),10000,parent.signal)
+  parent.abort();await assert.rejects(pending,{name:'AbortError'})
+  const overdue=new AbortController(),work=withRequestTimeout(()=>new Promise(()=>{}),10000,overdue.signal)
+  overdue.abort(new DOMException('overdue','TimeoutError'));await assert.rejects(work,{name:'TimeoutError'})
+})
+
+test('late rejection after a hard timeout remains observed rather than becoming an unhandled rejection', { timeout: 1000 }, async()=>{
+  let late!: (reason:Error)=>void,unhandled=false
+  const observe=()=>{unhandled=true};process.on('unhandledRejection',observe)
+  try{await assert.rejects(withRequestTimeout(()=>new Promise((_resolve,reject)=>{late=reject}),5),{name:'TimeoutError'});late(new Error('late network failure'));await new Promise(resolve=>setTimeout(resolve,10));assert.equal(unhandled,false)}finally{process.off('unhandledRejection',observe)}
+})

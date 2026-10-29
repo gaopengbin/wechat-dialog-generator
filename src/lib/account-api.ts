@@ -205,10 +205,10 @@ export async function consumeAccountExport(action_id: string = crypto.randomUUID
   return { quota: result.quota, action_id }
 }
 
-export function releaseAccountExport(action_id: string, identity: ExportIdentity) {
+export function releaseAccountExport(action_id: string, identity: ExportIdentity, signal?: AbortSignal) {
   assertExportIdentity(identity)
   return request<{ released: boolean; quota: ExportQuota }>('/quota/release', {
-    method: 'POST', body: JSON.stringify({ action_id }),
+    method: 'POST', body: JSON.stringify({ action_id }), signal,
   }, identity.credential)
 }
 
@@ -234,9 +234,9 @@ export const getGrowth = () => request<Growth>('/growth')
 export const createInvite = () => post<{ code: string }>('/growth/invite', {})
 export const revokeInvite = (code: string) => post('/growth/revoke', { code })
 export const visitInvite = (code: string) => post('/growth/visit', { code })
-export const completeAccountExport = (action_id: string, identity?: ExportIdentity) => {
+export const completeAccountExport = (action_id: string, identity?: ExportIdentity, signal?: AbortSignal) => {
   if (identity) assertExportIdentity(identity)
-  return request<{ ok: boolean; quota?: ExportQuota }>('/quota/complete', { method: 'POST', body: JSON.stringify({ action_id }) }, identity?.credential)
+  return request<{ ok: boolean; quota?: ExportQuota; settlement?: 'waived'; charged?: boolean }>('/quota/complete', { method: 'POST', body: JSON.stringify({ action_id }), signal }, identity?.credential)
     .then(result => { if (result?.ok !== true) throw new Error('导出确认响应不完整'); return result })
 }
 export function pendingInvite() {

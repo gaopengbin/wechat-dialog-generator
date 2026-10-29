@@ -122,7 +122,7 @@ test('timer automatically retries after backoff and adapter cannot reserve quota
   time += delay; callback(); await queue.flush(); queue.stop()
   assert.equal(calls, 2); assert.equal(store.list().length, 0)
   const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8')
-  assert.match(app, /const result = await completeAccountExport\(id, identity\)/)
+  assert.match(app, /const result = await completeAccountExport\(id, identity, signal\)/)
   const api = readFileSync(new URL('./account-api.ts', import.meta.url), 'utf8')
   const complete = api.slice(api.indexOf('export const completeAccountExport'), api.indexOf('export function pendingInvite'))
   assert.match(complete, /quota\/complete/); assert.doesNotMatch(complete, /quota\/consume|consumeAccountExport/)
@@ -145,4 +145,33 @@ test('release retries survive reload in a separate namespace and cannot become s
   success.put({ ...item, actionId: randomUUID() })
   assert.equal(release.list().length, 1)
   assert.equal(success.list().length, 1)
+})
+
+test('incident regression: a lost first acknowledgement cannot strand five later waived exports or debit twice', { timeout: 2000 }, async()=>{
+  const storage=disk(),store=createReceiptStore(()=>storage),first=randomUUID(),five=Array.from({length:5},()=>randomUUID()),charged=new Set<string>(),calls:string[]=[]
+  let late!:()=>void,time=1000,warnings=0
+  const queue=createExportReceiptQueue({store,identity:()=>({userId:'incident-fixture',credential:'fixture'}),now:()=>time,attemptTimeoutMs:10,schedule:()=>0 as unknown as ReturnType<typeof setTimeout>,cancel:()=>{},onPending:()=>warnings++,confirm:async id=>{
+    calls.push(id)
+    if(id===first){charged.add(id);if(calls.filter(x=>x===first).length===1)return new Promise(resolve=>{late=()=>resolve({ok:true})})}
+    return five.includes(id)?{ok:true,settlement:'waived',charged:false}:{ok:true}
+  }})
+  queue.enqueue(first,'incident-fixture');for(const id of five)queue.enqueue(id,'incident-fixture')
+  await queue.flush();await queue.flush()
+  assert.deepEqual(calls,[first,...five]);assert.equal(store.list().length,1);assert.equal(warnings,1);assert.equal(charged.size,1)
+  late();await new Promise(resolve=>setTimeout(resolve,5));assert.equal(store.list().length,1,'late completion cannot remove a newer retry state')
+  time+=2000;await queue.flush();queue.stop();assert.equal(charged.size,1);assert.equal(store.list().length,0)
+})
+
+test('pageshow/focus resume expires stale in-flight work even when browser timers were suspended', { timeout: 2000 }, async()=>{
+  const store=createReceiptStore(()=>disk());let time=1000,calls=0
+  const queue=createExportReceiptQueue({store,identity:()=>({userId:'A',credential:'fixture'}),now:()=>time,attemptTimeoutMs:1_000_000,schedule:()=>0 as unknown as ReturnType<typeof setTimeout>,cancel:()=>{},confirm:async()=>{if(++calls===1)return new Promise(()=>{});return {ok:true}}})
+  queue.enqueue(randomUUID(),'A');for(let i=0;i<5;i++)queue.enqueue(randomUUID(),'A')
+  time+=2_000_000;await queue.resume();queue.stop();assert.equal(calls,6);assert.equal(store.list().length,1);assert.equal(store.list()[0].attempts,1)
+  const app=readFileSync(new URL('../App.tsx',import.meta.url),'utf8');assert.match(app,/addEventListener\('pageshow', resume\)/);assert.match(app,/removeEventListener\('pageshow', resume\)/)
+})
+
+test('stopping an abort-ignoring attempt preserves the original receipt and does not notify after unmount', {timeout:2000},async()=>{
+  const store=createReceiptStore(()=>disk());let calls=0,warnings=0,late!:()=>void
+  const queue=createExportReceiptQueue({store,identity:()=>({userId:'A',credential:'fixture'}),schedule:()=>0 as unknown as ReturnType<typeof setTimeout>,cancel:()=>{},onPending:()=>warnings++,confirm:async()=>{if(++calls===1)return new Promise(resolve=>{late=()=>resolve({ok:true})});return {ok:true}}})
+  queue.enqueue(randomUUID(),'A');const pending=queue.flush();queue.stop();await pending;assert.equal(store.list().length,1);assert.equal(warnings,0);late();await new Promise(resolve=>setTimeout(resolve,5));assert.equal(store.list().length,1);queue.start();await queue.flush();queue.stop();assert.equal(calls,2);assert.equal(store.list().length,0)
 })
