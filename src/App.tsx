@@ -13,7 +13,7 @@ import { MessageEditor } from '@/components/MessageEditor';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { PhonePreview } from '@/components/PhonePreview';
 import { GuideCenter } from '@/components/GuideCenter';
-import { guideHref, type GuideId } from '@/lib/toolbox-guide';
+import { guideHref, guideNavigationEvent, type GuideId } from '@/lib/toolbox-guide';
 import { ProjectPanel } from '@/components/ProjectPanel';
 import { MomentsEditor } from '@/components/MomentsEditor';
 import { WechatSceneEditor } from '@/components/WechatSceneEditor';
@@ -110,10 +110,12 @@ function App() {
   const navigate = useCallback((next: WorkspaceRoute) => {
     window.history.pushState(null, '', workspaceHref(next, window.location.href));
     setRoute(next);
+    if (next === 'resources') window.dispatchEvent(new Event(guideNavigationEvent));
   }, []);
   const openGuide = useCallback((id: GuideId) => {
     window.history.pushState(null, '', guideHref(id, window.location.href));
     setRoute('resources');
+    window.dispatchEvent(new Event(guideNavigationEvent));
   }, []);
   useEffect(() => {
     const syncRoute = () => setRoute(readWorkspaceRoute(window.location.href));

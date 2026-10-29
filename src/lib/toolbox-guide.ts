@@ -2,6 +2,7 @@ import type { WorkspaceRoute } from './workspace-route'
 import { workspaceHref } from './workspace-route'
 
 export type GuideId = 'start' | 'chat' | 'messages' | 'appearance' | 'batch' | 'moments' | 'payment' | 'redpacket' | 'profile' | 'group' | 'drafts' | 'templates' | 'exports' | 'account' | 'rewards' | 'troubleshoot' | 'privacy'
+export const guideNavigationEvent = 'wechat-toolbox:guide-navigation'
 export type GuideSection = { title: string; steps: string[]; tip?: string; example?: string; canLoadChat?: boolean }
 export type GuideChapter = { id: GuideId; group: string; title: string; description: string; route?: WorkspaceRoute; sections: GuideSection[]; faqs: { question: string; answer: string }[]; related: GuideId[]; screenshot?: string }
 

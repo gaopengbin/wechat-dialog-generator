@@ -7,7 +7,7 @@ import { SelectField } from './ui/select'
 import { Disclosure } from './ui/controls'
 import { GrowthContent } from './GrowthContent'
 import { StudioLink } from './ToolHome'
-import { guideChapters, guideHref, readGuideId, searchGuide, type GuideId } from '@/lib/toolbox-guide'
+import { guideChapters, guideHref, readGuideId, searchGuide, guideNavigationEvent, type GuideId } from '@/lib/toolbox-guide'
 import type { WorkspaceRoute } from '@/lib/workspace-route'
 import './GuideCenter.css'
 
@@ -29,7 +29,8 @@ export function GuideCenter({ onNavigate, onUseTemplate, onAccount }: Props) {
   useEffect(() => {
     const pop = () => { setSelected(readGuideId(window.location.href)); setQuery('') }
     window.addEventListener('popstate', pop)
-    return () => { window.removeEventListener('popstate', pop); if (copyTimer.current) clearTimeout(copyTimer.current) }
+    window.addEventListener(guideNavigationEvent, pop)
+    return () => { window.removeEventListener('popstate', pop); window.removeEventListener(guideNavigationEvent, pop); if (copyTimer.current) clearTimeout(copyTimer.current) }
   }, [])
   useEffect(() => { if (scroll.current) scroll.current.scrollTop = 0 }, [selected])
   const go = (id: GuideId) => {
