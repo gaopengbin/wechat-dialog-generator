@@ -6,13 +6,14 @@ import { useConfirm } from '@/lib/use-confirm';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { captureChatPhone } from '@/lib/capture-chat';
 import { copyOrDownload, downloadPng } from '@/lib/image-delivery';
-import { ArrowLeft, ArrowRight, MessageCircle, BookOpen, Check, ChevronRight, Download, Copy, FolderOpen, History, Image as ImageIcon, LayoutGrid, MessageSquare, Settings2, Share2, ShieldCheck, UserRound, UsersRound } from 'lucide-react';
+import { ArrowRight, MessageCircle, BookOpen, Check, ChevronRight, Download, Copy, FolderOpen, History, Image as ImageIcon, LayoutGrid, MessageSquare, Settings2, Share2, ShieldCheck, UserRound, UsersRound } from 'lucide-react';
 import { ImportPanel } from '@/components/ImportPanel';
 import { UserAvatarManager } from '@/components/UserAvatarManager';
 import { MessageEditor } from '@/components/MessageEditor';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { PhonePreview } from '@/components/PhonePreview';
-import { GrowthContent } from '@/components/GrowthContent';
+import { GuideCenter } from '@/components/GuideCenter';
+import { guideHref, type GuideId } from '@/lib/toolbox-guide';
 import { ProjectPanel } from '@/components/ProjectPanel';
 import { MomentsEditor } from '@/components/MomentsEditor';
 import { WechatSceneEditor } from '@/components/WechatSceneEditor';
@@ -109,6 +110,10 @@ function App() {
   const navigate = useCallback((next: WorkspaceRoute) => {
     window.history.pushState(null, '', workspaceHref(next, window.location.href));
     setRoute(next);
+  }, []);
+  const openGuide = useCallback((id: GuideId) => {
+    window.history.pushState(null, '', guideHref(id, window.location.href));
+    setRoute('resources');
   }, []);
   useEffect(() => {
     const syncRoute = () => setRoute(readWorkspaceRoute(window.location.href));
@@ -698,6 +703,10 @@ function App() {
     editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     showToast('模板已载入，点击“解析并导入”即可预览');
   }, [showToast, navigate]);
+  const handleGuideTemplate = useCallback(async (content: string, templateId: string) => {
+    if ((importText.trim() || messages.length) && importText !== content && !await confirm({ title: '载入教程示例？', description: '示例会替换聊天页的导入文本，右侧预览暂不改变。之后点击“解析并导入”才会重建消息；需要保留现有内容时，请先确认本地草稿已保存。', confirmText: '载入示例文本' })) return;
+    handleUseTemplate(content, templateId);
+  }, [importText, messages.length, confirm, handleUseTemplate]);
 
   const handleShareSame = useCallback(async () => {
     if (!messages.length) {
@@ -916,7 +925,8 @@ function App() {
           <StudioLink route="home" onNavigate={navigate} className="studio-brand"><span><MessageSquare size={19} /></span><strong>微信创作工具箱</strong></StudioLink>
           <div className="studio-breadcrumb"><span>/</span><span>{isWorking ? '工作空间' : '创作中心'}</span><ChevronRight size={14} /><b>{workspaceTools.find(tool => tool.id === route)?.title || (route === 'exports' ? '导出日志' : route === 'resources' ? '模板与指南' : '工具概览')}</b></div>
           <div className="studio-header-actions">
-            <UpdateAnnouncement blocked={accountPrompt || paymentPrompt || shareOpen || officialAccountPrompt !== null || Boolean(confirmation)} />
+            {(isWorking || route === 'exports') && <Button variant="outline" size="sm" className="studio-guide-action" type="button" aria-label="查看当前功能教程" title="查看当前功能教程" onClick={() => openGuide(route === 'exports' ? 'exports' : activeTool)}><BookOpen size={16} /><span>使用教程</span></Button>}
+            <UpdateAnnouncement blocked={accountPrompt || paymentPrompt || shareOpen || officialAccountPrompt !== null || Boolean(confirmation)} onOpenGuide={() => openGuide('start')} />
             <Button variant="outline" size="sm" className="studio-official-account-action" type="button" aria-label="关注公众号" title="关注公众号" onClick={() => openOfficialAccountPrompt('header')}><MessageCircle size={17} /><span>公众号</span></Button>
             <RewardHeaderButton onClick={() => setShareOpen(true)} />
             <Button className="account-trigger" type="button" aria-label={`账户：${accountSession?.user.display_name ?? '未登录'}，${!accountSession ? '登录后导出' : unlimited ? '会员不限次' : `剩余 ${visibleQuota.total_remaining} 次`}`} onClick={() => { setAccountError(''); setAccountPrompt(true) }}><UserRound size={15} /><span>{accountSession ? accountSession.user.display_name : '登录'}</span><small>{!accountSession ? '导出需登录' : unlimited ? '会员' : `${visibleQuota.total_remaining} 次`}</small></Button>
@@ -937,7 +947,7 @@ function App() {
           <div className="studio-stage">
             {route === 'exports' && <ExportLogPage onNavigate={navigate} onRequestLogin={() => setAccountPrompt(true)} />}
             {route === 'home' && <div className="studio-page-scroll"><ToolHome onNavigate={navigate} hasDraft={hasMessages} promotion={<RewardPromotion session={accountSession} refreshKey={`${accountPrompt}:${shareOpen}`} onShare={() => setShareOpen(true)} onAccount={() => { setAccountError(''); setAccountPrompt(true); }} />} /></div>}
-            {route === 'resources' && <main className="studio-page-scroll studio-resources"><StudioLink route="home" onNavigate={navigate} className="studio-back-link"><ArrowLeft size={15} /> 返回工具概览</StudioLink><h1>模板与使用指南</h1><p className="studio-page-description">挑选一个示例，在独立工作页中继续编辑。</p><GrowthContent onUseTemplate={handleUseTemplate} onOpenEditor={() => { setChatSection('content'); navigate('chat'); }} /><footer className="analytics-note">创作内容和图片在本地处理；主动分享同款时，对话文字会写入分享链接。账号服务保存邮箱、验证和额度 / 邀请记录，访问统计使用匿名标识。</footer></main>}
+            {route === 'resources' && <GuideCenter onNavigate={navigate} onUseTemplate={(content, id) => { void handleGuideTemplate(content, id); }} onAccount={() => { setAccountError(''); setAccountPrompt(true); }} />}
             {isWorking && <h1 className="studio-work-title sr-only">{workspaceTools.find(tool => tool.id === activeTool)?.title}</h1>}
             <div className="studio-tool-page" hidden={route !== 'batch'}><BatchStudio currentChat={{ users, messages, settings, selfId }} loggedIn={!!accountSession} onRequireLogin={ensureExportLogin} remaining={visibleQuota.total_remaining} unlimited={unlimited} onDebit={debitBatchExport} onComplete={id => {
               completeExport(id);

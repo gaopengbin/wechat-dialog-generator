@@ -38,6 +38,7 @@ export function workspaceHref(route: WorkspaceRoute, baseUrl: string): string {
   const parsed = parseUrl(baseUrl)
   parsed.searchParams.delete('tool')
   parsed.searchParams.delete('page')
+  parsed.searchParams.delete('guide')
   if (route === 'resources' || route === 'exports') parsed.searchParams.set('page', route)
   else if (route !== 'home') parsed.searchParams.set('tool', route)
   parsed.hash = ''

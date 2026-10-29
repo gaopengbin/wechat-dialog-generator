@@ -1,4 +1,5 @@
 import { Disclosure } from './ui/controls';
+import { Button } from './ui/button';
 import {
   ArrowUpRight,
   BookOpen,
@@ -58,9 +59,10 @@ const templates = [
 interface GrowthContentProps {
   onUseTemplate: (content: string, templateId: string) => void;
   onOpenEditor?: () => void;
+  templatesOnly?: boolean;
 }
 
-export function GrowthContent({ onUseTemplate, onOpenEditor }: GrowthContentProps) {
+export function GrowthContent({ onUseTemplate, onOpenEditor, templatesOnly = false }: GrowthContentProps) {
   return (
     <section className="growth-content" aria-label="微信聊天截图制作指南">
       <div className="growth-section" id="templates">
@@ -78,15 +80,15 @@ export function GrowthContent({ onUseTemplate, onOpenEditor }: GrowthContentProp
               <span>{template.label}</span>
               <h3>{template.title}</h3>
               <p>{template.description}</p>
-              <button onClick={() => onUseTemplate(template.content, template.id)}>
+              <Button variant="outline" onClick={() => onUseTemplate(template.content, template.id)}>
                 使用这个模板 <MousePointerClick size={15} />
-              </button>
+              </Button>
             </article>
           ))}
         </div>
       </div>
 
-      <div className="growth-section guide-section" id="guide">
+      {!templatesOnly && <><div className="growth-section guide-section" id="guide">
         <div className="growth-heading">
           <div>
             <span className="growth-eyebrow"><BookOpen size={14} /> 使用教程</span>
@@ -138,6 +140,7 @@ export function GrowthContent({ onUseTemplate, onOpenEditor }: GrowthContentProp
         <span><Download size={15} /> 每日免费 10 次 · 无弹窗广告</span>
         <span>本工具与微信官方无关联，仅用于合法的创作、教学和设计演示。</span>
       </div>
+      </>}
     </section>
   );
 }
