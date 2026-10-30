@@ -99,7 +99,7 @@ test('capture revision and asset subphase are safe diagnostic values',async()=>{
  const reports:Record<string,string>[]=[]
  const log=createExportLogger(async()=>{},()=>{},p=>reports.push(p))({tool:'chat',mode:'standard'})
  await log.finish('failed','',captureFailure('asset_timeout','asset_embed','avatar','same_origin','body'))
- assert.equal(reports[0].capture_revision,'capture-20261026-r2')
+ assert.equal(reports[0].capture_revision,'capture-20261030-r3')
  assert.equal(reports[0].asset_phase,'body')
  assert.equal(reports[0].quota_phase,'not_requested')
  assert.equal(exportDetails({captureInfo:{asset_phase:'https://private.test',capture_size:'private text'}}).asset_phase,undefined)
