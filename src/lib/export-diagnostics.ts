@@ -17,11 +17,15 @@ export function exportReason(error: unknown): string {
 }
 
 export const captureDiagnosticValues: Record<string, readonly string[]> = {
-  failure_code: ['asset_fetch','asset_http','asset_decode','asset_timeout','asset_embed','svg_build','svg_decode','canvas_context','canvas_draw','capture_timeout'],
+  failure_code: ['asset_fetch','asset_http','asset_decode','asset_timeout','asset_embed','svg_build','svg_decode','svg_invalid','canvas_context','canvas_draw','capture_timeout'],
   asset_kind: ['avatar','message','background','chrome','other'],
   asset_scheme: ['data','blob','same_origin','remote','other'],
   asset_phase: ['fetch','body','decode','pixels','embed'],
   capture_size: ['phone','long','over_limit'],
+  svg_xml: ['valid','invalid'],
+  svg_size: ['under_256k','256k_1m','1m_4m','4m_16m','16m_plus'],
+  svg_cleanup: ['none','comments','attributes','mixed'],
+  svg_transport: ['uri','both'],
 }
 
 export function exportDetails(error: unknown): { error_kind: string; render_step: string; [key: string]: string } {
