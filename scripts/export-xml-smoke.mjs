@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict'
 import {mkdir,writeFile} from 'node:fs/promises'
 import {chromium} from 'file:///C:/Users/Administrator/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs'
-const output='C:/Users/Administrator/Documents/test/outputs/three-fixes-20261031/browser'
+const output=process.argv[2]||'C:/Users/Administrator/Documents/test/outputs/export-render-fix-20261103/xml',base=process.argv[3]||'http://127.0.0.1:4301'
 await mkdir(output,{recursive:true})
 const browser=await chromium.launch({channel:'msedge',headless:true})
 try{
  const context=await browser.newContext({viewport:{width:1440,height:1000}})
- await context.route('**/*',r=>new URL(r.request().url()).origin==='http://127.0.0.1:4303'&&r.request().method()==='GET'?r.continue():r.abort())
- const page=await context.newPage();await page.goto('http://127.0.0.1:4303/?tool=chat',{waitUntil:'networkidle'})
+ await context.route('**/*',r=>new URL(r.request().url()).origin===base&&r.request().method()==='GET'?r.continue():r.abort())
+ const page=await context.newPage();await page.goto(base+'/?tool=chat',{waitUntil:'networkidle'})
  const result=await page.evaluate(async()=>{
   const {captureChatPhone}=await import('/src/lib/capture-chat.ts')
   const {buildCaptureSvg}=await import('/src/lib/capture-svg-build.ts')
@@ -51,7 +51,7 @@ try{
  for(const r of result.results){assert.equal(r.success,r.mode!=='unbound_element',r.mode);if(r.success){assert.equal(r.width,1125);assert.equal(r.height,2436);assert.ok(r.varied>100)}}
  assert.equal(result.xml_space_preserved,'preserve')
  assert.equal(result.reports.length,1)
- const failed=result.reports[0];assert.equal(failed.failure_code,'svg_invalid');assert.equal(failed.svg_xml,'invalid');assert.equal(failed.quota_phase,'not_requested');assert.equal(failed.capture_revision,'capture-20261031-r4')
+ const failed=result.reports[0];assert.equal(failed.failure_code,'svg_invalid');assert.equal(failed.svg_xml,'invalid');assert.equal(failed.quota_phase,'not_requested');assert.equal(failed.capture_revision,'capture-20261103-r5')
  assert.doesNotMatch(JSON.stringify(result.reports),/private|extension:|<svg|parsererror|https:/)
  await writeFile(output+'/xml-capture.png',Buffer.from(result.png.split(',')[1],'base64'));delete result.png
  const report={at:new Date().toISOString(),browser:await browser.version(),source_dom_preserved:true,real_api_writes_blocked:true,...result}

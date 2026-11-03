@@ -54,6 +54,27 @@ test('HTTP, corrupt image and timeouts have distinct private-content-free classi
  assert.equal(details.failure_code,'asset_decode');assert.equal(details.asset_kind,'avatar');assert.equal(details.asset_scheme,'blob')
  assert.doesNotMatch(JSON.stringify(details),/private|https:|base64/)
 })
+
+test('HTTP status is a closed enum, without URLs or exception text',async()=>{
+ for(const [status,expected] of [[403,'403'],[418,'other']] as const){
+  await assert.rejects(loadCaptureResource('/private?token=SECRET','message','https://chat.test/',{...deps,fetcher:async()=>new Response('',{status})}),error=>{
+   const info=exportDetails(error);assert.equal(info.failure_code,'asset_http');assert.equal(info.asset_http_status,expected);assert.doesNotMatch(JSON.stringify(info),/SECRET|private|https:/);return true
+  })
+ }
+ assert.equal(exportDetails({captureInfo:{asset_http_status:'https://private.test'}}).asset_http_status,undefined)
+})
+
+test('cancelled image loads clear handlers and source, so timed-out decodes do not keep running',async()=>{
+ const previous=globalThis.Image;const created:StalledImage[]=[]
+ class StalledImage {onload:unknown=null;onerror:unknown=null;src='';constructor(){created.push(this)}}
+ try{
+  globalThis.Image=StalledImage as unknown as typeof Image
+  const controller=new AbortController(),pending=decodeImage(valid,controller.signal)
+  controller.abort()
+  await assert.rejects(pending,error=>(error as Error).name==='AbortError')
+  assert.equal(created[0].src,'');assert.equal(created[0].onload,null);assert.equal(created[0].onerror,null)
+ }finally{globalThis.Image=previous}
+})
 test('asset source classification never returns a hostname or path',()=>{
  assert.equal(assetScheme('blob:https://private.test/secret'),'blob')
  assert.equal(assetScheme(valid),'data')
@@ -99,7 +120,7 @@ test('capture revision and asset subphase are safe diagnostic values',async()=>{
  const reports:Record<string,string>[]=[]
  const log=createExportLogger(async()=>{},()=>{},p=>reports.push(p))({tool:'chat',mode:'standard'})
  await log.finish('failed','',captureFailure('asset_timeout','asset_embed','avatar','same_origin','body'))
- assert.equal(reports[0].capture_revision,'capture-20261031-r4')
+ assert.equal(reports[0].capture_revision,'capture-20261103-r5')
  assert.equal(reports[0].asset_phase,'body')
  assert.equal(reports[0].quota_phase,'not_requested')
  assert.equal(exportDetails({captureInfo:{asset_phase:'https://private.test',capture_size:'private text'}}).asset_phase,undefined)

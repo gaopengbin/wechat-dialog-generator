@@ -15,6 +15,7 @@ test('long-image safety limit survives repeated wrapping and retains actionable 
  const wrapped=renderFailure(first)
  assert.equal(exportReason(first),'image_too_large')
  assert.equal(exportReason(wrapped),'image_too_large')
+ assert.equal(exportDetails(wrapped).failure_code,'image_too_large')
  assert.match(wrapped.message,/16000/)
  assert.match(wrapped.message,/拆成多组/)
  assert.doesNotMatch(JSON.stringify(exportDetails(wrapped)),/对话|16000/)

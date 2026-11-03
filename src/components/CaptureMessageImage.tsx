@@ -1,12 +1,13 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Button } from './ui/button';
 import { assetScheme, loadPreviewResource } from '@/lib/capture-resources';
+import { exportDetails } from '@/lib/export-diagnostics';
 
 export function CaptureMessageImage({ source, number, onLocalize, onReplace, onError }: {
   source: string; number: number; onLocalize?: (data: string) => void; onReplace?: () => void; onError?: (error?: string) => void;
 }) {
   const [attempt, setAttempt] = useState(0);
-  const [result, setResult] = useState<{ source: string; data?: string; error?: string }>();
+  const [result, setResult] = useState<{ source: string; data?: string; error?: string; details?: Record<string,string> }>();
   const localize = useRef(onLocalize);
   const reportError = useRef(onError);
   useLayoutEffect(() => { localize.current = onLocalize; reportError.current = onError; }, [onLocalize, onError]);
@@ -20,12 +21,12 @@ export function CaptureMessageImage({ source, number, onLocalize, onReplace, onE
       reportError.current?.();
       localize.current?.(data);
     }, error => {
-      if (!disposed) { const code = error?.captureInfo?.failure_code || 'asset_fetch'; setResult({ source, error: code }); reportError.current?.(code); }
+      if (!disposed) { const details=exportDetails(error),code=details.failure_code || 'asset_fetch'; setResult({ source, error: code, details }); reportError.current?.(code); }
     });
     return () => { disposed = true; };
   }, [source, remote, attempt]);
   const current = result?.source === source ? result : undefined;
-  return <div data-message-number={number} data-capture-resource-error={remote ? current?.error : undefined}>
+  return <div data-message-number={number} data-capture-resource-error={remote ? current?.error : undefined} data-capture-http-status={remote?current?.details?.asset_http_status:undefined} data-capture-asset-phase={remote?current?.details?.asset_phase:undefined}>
     <img src={current?.data || source} alt="" />
     {remote && !current && <span data-capture-ui className="wc-image-check" role="status">正在检查图片能否导出…</span>}
     {remote && current?.error && <div data-capture-ui className="wc-image-recovery" role="alert" onClick={event => event.stopPropagation()}>
